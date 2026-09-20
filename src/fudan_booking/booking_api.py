@@ -83,6 +83,9 @@ class BookingSubmission:
     ok: bool
     reason: str
     process_id: int | None = None
+    submit_elapsed_ms: int | None = None
+    challenge_elapsed_ms: int | None = None
+    challenge_completed: bool | None = None
 
 
 def _booking_rejection_reason(message: str) -> str | None:
@@ -246,7 +249,11 @@ class BookingReadClient:
             # A 409/422 is the normal optimistic-concurrency outcome: the
             # slot disappeared between the calendar read and the submit.
             if response.status_code in {409, 422}:
-                return BookingSubmission(False, "slot_unavailable")
+                return BookingSubmission(
+                    False,
+                    "slot_unavailable",
+                    **self._submission_timing(response),
+                )
             self._json(response, "booking submission")
             raise BookingError("booking submission failed") from exc
         try:
@@ -259,7 +266,11 @@ class BookingReadClient:
             message = str(body.get("m") or "").strip()
             reason = _booking_rejection_reason(message)
             if reason is not None:
-                return BookingSubmission(False, reason)
+                return BookingSubmission(
+                    False,
+                    reason,
+                    **self._submission_timing(response),
+                )
             # Keep an unknown business rejection diagnosable without dumping
             # the complete response (which may contain unrelated fields).
             detail = " ".join(message.split())[:160]
@@ -273,6 +284,7 @@ class BookingReadClient:
             True,
             "submitted",
             int(process_id) if process_id is not None else None,
+            **self._submission_timing(response),
         )
 
     def default_mobile(self) -> str:
@@ -285,6 +297,28 @@ class BookingReadClient:
         mobile = data.get("mobile")
         self._cached_mobile = str(mobile) if mobile else ""
         return self._cached_mobile
+
+    @staticmethod
+    def _submission_timing(response: requests.Response) -> dict[str, object]:
+        headers = getattr(response, "headers", {}) or {}
+
+        def integer(name: str) -> int | None:
+            value = headers.get(name)
+            try:
+                return int(value) if value is not None else None
+            except (TypeError, ValueError):
+                return None
+
+        completed = headers.get("X-Fudan-Challenge-Completed")
+        return {
+            "submit_elapsed_ms": integer("X-Fudan-Submit-Elapsed-Ms"),
+            "challenge_elapsed_ms": integer("X-Fudan-Challenge-Elapsed-Ms"),
+            "challenge_completed": (
+                completed.lower() == "true"
+                if isinstance(completed, str)
+                else None
+            ),
+        }
 
     @classmethod
     def login(cls, credentials: UISCredentials) -> BookingReadClient:

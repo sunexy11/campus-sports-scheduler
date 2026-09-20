@@ -4,7 +4,12 @@ import pytest
 import requests
 from Crypto.PublicKey import RSA
 
-from fudan_booking.auth import UISCredentials, _raise_for_status, login_to_service
+from fudan_booking.auth import (
+    UISCredentials,
+    _CasBridge,
+    _raise_for_status,
+    login_to_service,
+)
 from fudan_booking.errors import AntiBotChallenge, AuthenticationFailed, MFARequired
 
 
@@ -127,6 +132,28 @@ def test_booking_412_is_reported_as_antibot_challenge() -> None:
     response.url = "https://booking.fudan.edu.cn/reservation/api/login/cas?ticket=secret"
     with pytest.raises(AntiBotChallenge, match="瑞数反爬校验"):
         _raise_for_status(response, "CAS 票据兑换")
+
+
+def test_bridge_response_copies_booking_timing_metadata() -> None:
+    response = _CasBridge._response_from_result(
+        {
+            "status": 200,
+            "content_type": "application/json",
+            "body": '{"e":"OK"}',
+            "timing": {
+                "submit_elapsed_ms": 15123,
+                "first_post_elapsed_ms": 12,
+                "retry_post_elapsed_ms": 8,
+                "challenge_elapsed_ms": 15001,
+                "challenge_completed": False,
+            },
+        },
+        "https://booking.fudan.edu.cn/reservation/site/resource/launch",
+    )
+
+    assert response.headers["X-Fudan-Submit-Elapsed-Ms"] == "15123"
+    assert response.headers["X-Fudan-Challenge-Elapsed-Ms"] == "15001"
+    assert response.headers["X-Fudan-Challenge-Completed"] == "False"
 
 
 def test_booking_412_can_use_local_cas_bridge(monkeypatch, tmp_path) -> None:

@@ -181,6 +181,18 @@ class _CasBridge:
         response.status_code = int(result.get("status", 0))
         response.url = url
         response.headers["Content-Type"] = str(result.get("content_type") or "")
+        timing = result.get("timing")
+        if isinstance(timing, dict):
+            for key, header in (
+                ("submit_elapsed_ms", "X-Fudan-Submit-Elapsed-Ms"),
+                ("first_post_elapsed_ms", "X-Fudan-First-Post-Elapsed-Ms"),
+                ("retry_post_elapsed_ms", "X-Fudan-Retry-Post-Elapsed-Ms"),
+                ("challenge_elapsed_ms", "X-Fudan-Challenge-Elapsed-Ms"),
+                ("challenge_completed", "X-Fudan-Challenge-Completed"),
+            ):
+                value = timing.get(key)
+                if value is not None:
+                    response.headers[header] = str(value)
         response._content = str(result.get("body") or "").encode("utf-8")
         return response
 

@@ -117,8 +117,9 @@ async function fetchBookingPost(url, cookieJar, referer, body) {
 async function executePostChallenge(response, cookieJar, referer) {
   const contentType = response.headers.get("content-type") || "";
   if (response.status !== 412 || !contentType.includes("text/html")) {
-    return false;
+    return { attempted: false, completed: false, elapsed_ms: null };
   }
+  const startedAt = performance.now();
   const html = await response.text();
   if (html.length > 4 * 1024 * 1024) {
     throw new Error("anti-bot challenge is too large");
@@ -169,12 +170,16 @@ async function executePostChallenge(response, cookieJar, referer) {
       error: () => {},
     },
   });
-  await Promise.race([
-    exited,
-    new Promise((resolve) => setTimeout(resolve, 15000)),
+  const completed = await Promise.race([
+    exited.then(() => true),
+    new Promise((resolve) => setTimeout(() => resolve(false), 15000)),
   ]);
   dom.window.close();
-  return true;
+  return {
+    attempted: true,
+    completed,
+    elapsed_ms: Math.round(performance.now() - startedAt),
+  };
 }
 
 function positiveInteger(value, name) {
@@ -291,21 +296,28 @@ async function handle(request) {
 async function handleBooking(request) {
   if (!state) throw new Error("bridge session is not initialized");
   const form = bookingForm(request);
+  const startedAt = performance.now();
+  const firstPostStartedAt = performance.now();
   let response = await fetchBookingPost(
     `${"https://"}${BOOKING_HOST}${BOOKING_PATH}`,
     state.cookieJar,
     state.ticketUrl,
     form,
   );
+  const firstPostElapsedMs = Math.round(performance.now() - firstPostStartedAt);
+  let challenge = null;
+  let retryPostElapsedMs = null;
   if (response.status === 412) {
-    const challenged = await executePostChallenge(response, state.cookieJar, state.ticketUrl);
-    if (challenged) {
+    challenge = await executePostChallenge(response, state.cookieJar, state.ticketUrl);
+    if (challenge.attempted) {
+      const retryPostStartedAt = performance.now();
       response = await fetchBookingPost(
         `${"https://"}${BOOKING_HOST}${BOOKING_PATH}`,
         state.cookieJar,
         state.ticketUrl,
         form,
       );
+      retryPostElapsedMs = Math.round(performance.now() - retryPostStartedAt);
     }
   }
   const body = await response.text();
@@ -315,6 +327,13 @@ async function handleBooking(request) {
     status: response.status,
     content_type: response.headers.get("content-type") || "",
     body,
+    timing: {
+      submit_elapsed_ms: Math.round(performance.now() - startedAt),
+      first_post_elapsed_ms: firstPostElapsedMs,
+      retry_post_elapsed_ms: retryPostElapsedMs,
+      challenge_elapsed_ms: challenge?.elapsed_ms ?? null,
+      challenge_completed: challenge?.completed ?? null,
+    },
   };
 }
 

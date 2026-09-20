@@ -218,6 +218,21 @@ def monitor_and_book_once(
                     "ok": result.ok,
                     "reason": result.reason,
                     **({"process_id": result.process_id} if result.process_id else {}),
+                    **(
+                        {"submit_elapsed_ms": result.submit_elapsed_ms}
+                        if result.submit_elapsed_ms is not None
+                        else {}
+                    ),
+                    **(
+                        {"challenge_elapsed_ms": result.challenge_elapsed_ms}
+                        if result.challenge_elapsed_ms is not None
+                        else {}
+                    ),
+                    **(
+                        {"challenge_completed": result.challenge_completed}
+                        if result.challenge_completed is not None
+                        else {}
+                    ),
                 }
             )
             if result.ok:
