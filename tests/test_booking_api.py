@@ -36,12 +36,14 @@ class FakeBookingBridge:
     def __init__(self, payload: dict) -> None:
         self.payload = payload
         self.calls = []
+        self.get_calls = []
 
     def book_resource(self, **kwargs):
         self.calls.append(kwargs)
         return BookingResponse(self.payload)
 
     def get(self, url, **kwargs):
+        self.get_calls.append((url, kwargs))
         return BookingResponse({"e": "OK", "d": {"mobile": "13800000000"}})
 
 
@@ -335,3 +337,22 @@ def test_submit_booking_uses_authenticated_default_contact() -> None:
 
     assert result.ok is True
     assert bridge.calls[0]["phone"] == "13800000000"
+
+
+def test_authenticated_default_contact_is_cached_for_multiple_submissions() -> None:
+    session = FakeSession([])
+    bridge = FakeBookingBridge({"e": "OK", "d": {"process_id": 123}})
+    session._fudan_cas_bridge = bridge
+    client = BookingReadClient(session)
+
+    for period_id in (3800, 3801):
+        result = client.submit_booking(
+            group_id=938,
+            sub_resource_ids=(939,),
+            period_id=period_id,
+            target_date=date(2026, 9, 22),
+        )
+        assert result.ok is True
+
+    assert len(bridge.calls) == 2
+    assert len(bridge.get_calls) == 1

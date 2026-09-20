@@ -145,6 +145,7 @@ class BookingReadClient:
     def __init__(self, session: requests.Session) -> None:
         self.session = session
         self.session.headers["Referer"] = SPORTS_PAGE
+        self._cached_mobile: str | None = None
 
     def _get(self, url: str, **kwargs) -> requests.Response:
         """Use the persistent no-browser bridge when CAS created one."""
@@ -277,10 +278,13 @@ class BookingReadClient:
     def default_mobile(self) -> str:
         """Return the authenticated account mobile used by the web form."""
 
+        if self._cached_mobile is not None:
+            return self._cached_mobile
         response = self._get(DETAIL_MOBILE_ENDPOINT, timeout=20)
         data = self._json(response, "account contact")
         mobile = data.get("mobile")
-        return str(mobile) if mobile else ""
+        self._cached_mobile = str(mobile) if mobile else ""
+        return self._cached_mobile
 
     @classmethod
     def login(cls, credentials: UISCredentials) -> BookingReadClient:
