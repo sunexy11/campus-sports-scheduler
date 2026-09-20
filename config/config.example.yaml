@@ -9,9 +9,9 @@ scheduled_jobs:
   - name: 后天北区体育馆乒乓球
     enabled: true
     date_offset: 2
-    action_start: "11:48"
-    login_at: "11:48"
-    submit_at: "11:53"
+    action_start: "11:57"
+    login_at: "11:57"
+    submit_at: "11:59"
     strategy: consecutive_first
     max_new_reservations: 2
     fallback_to_single_slot: true
