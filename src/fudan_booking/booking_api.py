@@ -44,6 +44,14 @@ class ResourceAvailability:
     periods: tuple[PeriodAvailability, ...]
 
 
+def _is_unoccupied(value: object) -> bool:
+    """Accept the boolean and numeric encodings used by the booking API."""
+
+    if value is False or value == 0:
+        return True
+    return isinstance(value, str) and value.strip().lower() in {"0", "false"}
+
+
 @dataclass(frozen=True, slots=True)
 class BookingSubmission:
     """Result of one live booking submission.
@@ -283,7 +291,7 @@ class BookingReadClient:
                 if not isinstance(slots, dict):
                     continue
                 slot = slots.get(str(period_id), slots.get(period_id))
-                if isinstance(slot, dict) and slot.get("occupy") is False:
+                if isinstance(slot, dict) and _is_unoccupied(slot.get("occupy")):
                     available_count += 1
             periods.append(
                 PeriodAvailability(
@@ -300,7 +308,6 @@ class BookingReadClient:
             sub_resource_ids=sub_resource_ids,
             periods=tuple(periods),
         )
-
     def list_unfinished(self) -> list[dict]:
         response = self._get(
             f"{BOOKING_BASE}/reservation/site/appointment/appointment-list",

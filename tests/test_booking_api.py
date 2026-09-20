@@ -155,6 +155,25 @@ def test_missing_slot_data_is_not_assumed_available() -> None:
     assert availability.periods[0].available is False
 
 
+def test_numeric_zero_slot_is_available() -> None:
+    session = FakeSession(
+        [
+            {
+                "e": "OK",
+                "d": {
+                    "time": [{"id": 3800, "str_time": "19:00-20:00"}],
+                    "resource": [{"id": 939, "name": "1号场地"}],
+                    "data": {"939": {"3800": {"occupy": 0}}},
+                },
+            }
+        ]
+    )
+
+    availability = BookingReadClient(session).get_availability(938, date(2026, 9, 22))
+
+    assert availability.periods[0].available is True
+
+
 def test_api_http_error_does_not_expose_query_values() -> None:
     response = requests.Response()
     response.status_code = 403

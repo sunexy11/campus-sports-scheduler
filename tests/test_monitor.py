@@ -1,7 +1,7 @@
 from datetime import date
 
 from fudan_booking.booking_api import PeriodAvailability, ResourceAvailability, ResourceSummary
-from fudan_booking.monitor import monitor_once
+from fudan_booking.monitor import _target_dates, monitor_once
 
 
 class FakeClient:
@@ -24,6 +24,14 @@ class FakeNotifier:
 
     def send(self, subject, text):
         self.messages.append((subject, text))
+
+
+def test_next_three_days_means_today_tomorrow_and_day_after_tomorrow():
+    assert _target_dates("next_3_days", date(2026, 9, 20)) == [
+        date(2026, 9, 20),
+        date(2026, 9, 21),
+        date(2026, 9, 22),
+    ]
 
 
 def test_monitor_once_matches_venue_sport_and_notifies_once():

@@ -10,7 +10,7 @@ from .notifier import QQSMTPNotifier
 
 def _target_dates(value: Any, today: date) -> list[date]:
     if value == "next_3_days":
-        return [today + timedelta(days=offset) for offset in range(1, 4)]
+        return [today + timedelta(days=offset) for offset in range(3)]
     if isinstance(value, list):
         return [date.fromisoformat(str(item)) for item in value]
     raise ValueError("monitor dates must be next_3_days or a list of YYYY-MM-DD")
