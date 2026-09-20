@@ -14,4 +14,5 @@ node_modules/
 worker/.npm-cache/
 worker/.wrangler/
 challenge/.pnpm-store/
+.pnpm-store/
 coverage/
