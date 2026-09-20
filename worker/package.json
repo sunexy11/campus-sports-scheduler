@@ -1,0 +1,16 @@
+{
+  "name": "fudan-booking-monitor-worker",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "check": "tsc --noEmit",
+    "dev": "wrangler dev --test-scheduled",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260920.1",
+    "typescript": "^5.9.2",
+    "wrangler": "^4.40.0"
+  }
+}

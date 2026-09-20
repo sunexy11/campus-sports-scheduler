@@ -1,0 +1,44 @@
+name: Book at opening time
+
+# The cron trigger stays disabled until read-only authentication and a manual
+# dry-run have passed. Planned schedule: 22:50 UTC = 06:50 Asia/Shanghai.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Do not submit a reservation
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: book-at-open
+  cancel-in-progress: false
+
+jobs:
+  validate-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+      - run: pnpm install --frozen-lockfile
+        working-directory: challenge
+      - run: python -m pip install -e .
+      - run: fudan-booking validate-config --config config/config.example.yaml
+      - name: Safety gate
+        run: |
+          echo "Live booking is not enabled in the scaffold."
+          echo "Complete read-only authentication and confirm a dry-run first."

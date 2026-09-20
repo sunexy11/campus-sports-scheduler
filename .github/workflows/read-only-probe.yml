@@ -1,0 +1,64 @@
+name: Read-only booking probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      resource_id:
+        description: Optional resource ID; provide together with date
+        required: false
+        type: string
+      date:
+        description: Optional schedule date (YYYY-MM-DD)
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: read-only-booking-probe
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      FUDAN_USERNAME: ${{ secrets.FUDAN_USERNAME }}
+      FUDAN_PASSWORD: ${{ secrets.FUDAN_PASSWORD }}
+      FUDAN_TOTP_SECRET: ${{ secrets.FUDAN_TOTP_SECRET }}
+      FUDAN_NODE_BIN: node
+      PROBE_RESOURCE_ID: ${{ inputs.resource_id }}
+      PROBE_DATE: ${{ inputs.date }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+      - run: pnpm install --frozen-lockfile
+        working-directory: challenge
+      - run: python -m pip install -e .
+      - name: Run read-only probe
+        shell: bash
+        run: |
+          if [[ -z "$FUDAN_USERNAME" || -z "$FUDAN_PASSWORD" ]]; then
+            echo "Required GitHub Secrets are missing." >&2
+            exit 2
+          fi
+
+          args=(probe)
+          if [[ -n "$PROBE_RESOURCE_ID" || -n "$PROBE_DATE" ]]; then
+            if [[ -z "$PROBE_RESOURCE_ID" || -z "$PROBE_DATE" ]]; then
+              echo "resource_id and date must be provided together." >&2
+              exit 2
+            fi
+            args+=(--resource-id "$PROBE_RESOURCE_ID" --date "$PROBE_DATE")
+          fi
+          fudan-booking "${args[@]}"

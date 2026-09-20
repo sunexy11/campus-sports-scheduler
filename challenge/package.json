@@ -1,0 +1,12 @@
+{
+  "name": "fudan-booking-cas-bridge",
+  "private": true,
+  "version": "0.1.0",
+  "description": "本地执行复旦预约站点瑞数校验的隔离辅助进程",
+  "engines": {
+    "node": ">=24.19.0 <25"
+  },
+  "dependencies": {
+    "sdenv": "1.1.3"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "fudan-booking-monitor",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-20",
+  "observability": {
+    "enabled": true
+  },
+  "triggers": {
+    // Keep disabled until the read-only monitor has been verified.
+    // Planned value: ["*/5 * * * *"]
+    "crons": []
+  },
+  "vars": {
+    "TIMEZONE": "Asia/Shanghai",
+    "MONITOR_START": "07:00",
+    "MONITOR_END": "24:00"
+  }
+}
+
