@@ -116,13 +116,15 @@ def test_schedule_is_normalized_without_exposing_occupants() -> None:
                         {"id": 940, "name": "2号场地"},
                     ],
                     "data": {
-                        "939": {
-                            "3800": {"occupy": False, "user": "不应输出"},
-                            "3801": {"occupy": True, "user": "不应输出"},
-                        },
-                        "940": {
-                            "3800": {"occupy": True},
-                            "3801": {"occupy": True},
+                        "2026-09-22": {
+                            "939": {
+                                "3800": {"status": 0, "total": 1, "num": "1", "user": "不应输出"},
+                                "3801": {"status": 3, "total": 1, "num": "0", "user": "不应输出"},
+                            },
+                            "940": {
+                                "3800": {"status": 3, "total": 1, "num": "0"},
+                                "3801": {"status": 3, "total": 1, "num": "0"},
+                            },
                         },
                     },
                 },
@@ -145,7 +147,7 @@ def test_missing_slot_data_is_not_assumed_available() -> None:
                 "d": {
                     "time": [{"id": 3800, "str_time": "19:00-20:00"}],
                     "resource": [{"id": 939, "name": "1号场地"}],
-                    "data": {},
+                    "data": {"2026-09-22": {}},
                 },
             }
         ]
@@ -155,7 +157,7 @@ def test_missing_slot_data_is_not_assumed_available() -> None:
     assert availability.periods[0].available is False
 
 
-def test_numeric_zero_slot_is_available() -> None:
+def test_status_zero_slot_with_capacity_is_available() -> None:
     session = FakeSession(
         [
             {
@@ -163,7 +165,11 @@ def test_numeric_zero_slot_is_available() -> None:
                 "d": {
                     "time": [{"id": 3800, "str_time": "19:00-20:00"}],
                     "resource": [{"id": 939, "name": "1号场地"}],
-                    "data": {"939": {"3800": {"occupy": 0}}},
+                    "data": {
+                        "2026-09-22": {
+                            "939": {"3800": {"status": 0, "total": 1, "num": "1"}},
+                        }
+                    },
                 },
             }
         ]

@@ -15,6 +15,7 @@ const USER_AGENT =
 const READ_ONLY_PATHS = new Set([
   "/reservation/api/topic/resource-list",
   "/reservation/api/resource/large-screen",
+  "/reservation/site/resource/calendar",
   "/reservation/site/appointment/appointment-list",
 ]);
 const BOOKING_PATH = "/reservation/site/resource/launch";

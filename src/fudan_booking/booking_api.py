@@ -249,6 +249,12 @@ class BookingReadClient:
         return resources
 
     def get_schedule(self, resource_id: int, target_date: date) -> dict:
+        """Read the legacy large-screen shape kept for compatibility/tests.
+
+        The booking page no longer uses this endpoint for its date calendar;
+        callers that need availability should use :meth:`get_availability`.
+        """
+
         response = self._get(
             f"{BOOKING_BASE}/reservation/api/resource/large-screen",
             params={"id": resource_id, "date": target_date.isoformat()},
@@ -256,14 +262,44 @@ class BookingReadClient:
         )
         return self._json(response, "schedule")
 
+    def get_calendar(self, resource_id: int, target_date: date) -> dict:
+        """Read the same date calendar endpoint used by the web page.
+
+        The server accepts a JSON date range rather than a single ``date``
+        query parameter.  Keeping the range to one day makes the returned
+        payload unambiguous and avoids client-side date/time filtering.
+        """
+
+        response = self._get(
+            f"{BOOKING_BASE}/reservation/site/resource/calendar",
+            params={
+                "id": resource_id,
+                "collective": 0,
+                "date": json.dumps(
+                    {
+                        "start_date": target_date.isoformat(),
+                        "end_date": target_date.isoformat(),
+                    },
+                    separators=(",", ":"),
+                ),
+            },
+            timeout=20,
+        )
+        return self._json(response, "resource calendar")
+
     def get_availability(
         self,
         resource_id: int,
         target_date: date,
     ) -> ResourceAvailability:
-        """Normalize a schedule without exposing occupants or concrete-court choices."""
+        """Normalize the web calendar without exposing occupant details.
 
-        schedule = self.get_schedule(resource_id, target_date)
+        ``status`` is authoritative: the site itself marks expired, closed,
+        disabled and full periods.  We intentionally do not compare the
+        current clock with a period here.
+        """
+
+        schedule = self.get_calendar(resource_id, target_date)
         raw_times = schedule.get("time") or []
         raw_resources = schedule.get("resource") or []
         raw_data = schedule.get("data") or {}
@@ -279,6 +315,10 @@ class BookingReadClient:
             for item in raw_resources
             if isinstance(item, dict) and item.get("id") is not None
         )
+        date_data = raw_data.get(target_date.isoformat())
+        if not isinstance(date_data, dict):
+            raise BookingError("resource calendar did not return the requested date")
+
         periods: list[PeriodAvailability] = []
         for item in raw_times:
             if not isinstance(item, dict) or item.get("id") is None:
@@ -287,11 +327,22 @@ class BookingReadClient:
             label = str(item.get("str_time") or period_id)
             available_count = 0
             for sub_resource_id in sub_resource_ids:
-                slots = raw_data.get(str(sub_resource_id), raw_data.get(sub_resource_id, {}))
+                slots = date_data.get(
+                    str(sub_resource_id), date_data.get(sub_resource_id, {})
+                )
                 if not isinstance(slots, dict):
                     continue
                 slot = slots.get(str(period_id), slots.get(period_id))
-                if isinstance(slot, dict) and _is_unoccupied(slot.get("occupy")):
+                if not isinstance(slot, dict):
+                    continue
+                # The booking page uses status=0 for a selectable slot.  The
+                # numeric ``num`` is an additional guard for unusual payloads
+                # where a selectable-looking slot has no remaining capacity.
+                try:
+                    remaining = int(slot.get("num", 0))
+                except (TypeError, ValueError):
+                    remaining = 0
+                if slot.get("status") == 0 and remaining > 0:
                     available_count += 1
             periods.append(
                 PeriodAvailability(

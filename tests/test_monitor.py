@@ -57,6 +57,9 @@ def test_monitor_once_matches_venue_sport_and_notifies_once():
 
     assert findings[0]["resource_id"] == 938
     assert findings[0]["date"] == "2026-09-22"
+    assert findings[0]["available_sub_resources"] == 1
+    assert findings[0]["occupied_sub_resources"] == 3
+    assert findings[0]["total_sub_resources"] == 4
     assert len(notifier.messages) == 1
 
 

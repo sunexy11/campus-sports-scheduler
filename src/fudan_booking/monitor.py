@@ -53,6 +53,10 @@ def monitor_once(
                             "date": target_date.isoformat(),
                             "time": period.time,
                             "available_sub_resources": period.available_sub_resources,
+                            "occupied_sub_resources": (
+                                period.total_sub_resources - period.available_sub_resources
+                            ),
+                            "total_sub_resources": period.total_sub_resources,
                         }
                     )
 
@@ -60,7 +64,8 @@ def monitor_once(
         lines = ["检测到以下场馆时段有空位：", ""]
         lines.extend(
             f"- {item['name']} | {item['date']} | {item['time']} | "
-            f"空余子场地 {item['available_sub_resources']} 个"
+            f"空余 {item['available_sub_resources']}/{item['total_sub_resources']} 个，"
+            f"已占用 {item['occupied_sub_resources']} 个"
             for item in findings
         )
         notifier.send("复旦场馆空位提醒", "\n".join(lines))
