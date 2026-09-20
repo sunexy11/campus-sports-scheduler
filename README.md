@@ -2,7 +2,7 @@
 
 复旦体育场馆定时预约与空位监控工具。
 
-当前阶段以只读联调为主：配置校验、最多三个未结束预约的容量控制、连续时段优先策略、QQ SMTP 通知适配器、UIS 登录和只读查询接口已经建立。受控的体育场馆预约提交接口骨架已经加入，但正式工作流和定时触发仍保持关闭。
+默认以只读联调为主：配置校验、最多三个未结束预约的容量控制、连续时段优先策略、QQ SMTP 通知适配器、UIS 登录和网页日历查询已经建立。受控的体育场馆预约提交也已加入，但必须显式传入 `--allow-booking`，配置示例中的预约任务默认关闭。
 
 预约站点目前有瑞数 JavaScript 校验。项目已加入不启动浏览器的 Node/JSDOM 校验桥；本地和
 GitHub Actions 需要 Node 24 与 challenge 依赖，Python 会在同一进程会话中查询只读接口。
@@ -36,6 +36,15 @@ fudan-booking probe --prompt-credentials
 ```
 
 也可以把 `.env.example` 复制为不会提交的 `.env`，在 `.env` 中填写本地凭据后运行 `fudan-booking probe`。切勿把真实值写入 `.env.example`。
+
+预约策略可以先做不提交演练：
+
+```bash
+fudan-booking scheduled-book-once --config config/config.example.yaml
+```
+
+确认输出无误后，才在手动 Actions 或本地命令中增加 `--allow-booking`。监控任务同理；
+空位在提交前被别人抢走时会记录为 `slot_unavailable`，继续尝试其他候选，不会中断后续监控。
 
 真实凭据只能放在 GitHub Secrets、Cloudflare Secrets 或未提交的本地 `.env` 中。预约时默认使用系统账号侧已保存的联系方式；不要把密码、SMTP 授权码、Cookie 或 TOTP 种子写进配置文件。
 

@@ -5,17 +5,19 @@ import getpass
 import json
 import os
 import sys
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import requests
 from dotenv import load_dotenv
 
 from .auth import UISCredentials
 from .booking_api import BookingReadClient
+from .booking_runner import scheduled_book_once
 from .config import load_config
 from .errors import BookingError, ConfigurationError
-from .monitor import monitor_once
+from .monitor import monitor_and_book_once
 from .notifier import QQSMTPNotifier, QQSMTPSettings
 
 
@@ -49,6 +51,33 @@ def _build_parser() -> argparse.ArgumentParser:
     monitor = commands.add_parser("monitor-once", help="check configured slots once")
     monitor.add_argument("--config", required=True)
     monitor.add_argument("--no-email", action="store_true", help="do not send QQ email")
+    monitor.add_argument(
+        "--allow-booking",
+        action="store_true",
+        help="allow jobs with mode=auto_book_if_capacity to submit reservations",
+    )
+    monitor.add_argument(
+        "--max-booking-rounds",
+        type=int,
+        default=3,
+        help="maximum re-scan rounds after racing booking attempts",
+    )
+
+    scheduled = commands.add_parser(
+        "scheduled-book-once",
+        help="evaluate opening-time preferences once",
+    )
+    scheduled.add_argument("--config", required=True)
+    scheduled.add_argument(
+        "--allow-booking",
+        action="store_true",
+        help="submit reservations; without this flag the command is a dry-run",
+    )
+    scheduled.add_argument(
+        "--today",
+        type=date.fromisoformat,
+        help="override today for a deterministic local test (YYYY-MM-DD)",
+    )
     return parser
 
 
@@ -113,14 +142,33 @@ def _run_monitor_once(args: argparse.Namespace) -> int:
     notifier = None
     if not args.no_email:
         notifier = QQSMTPNotifier(QQSMTPSettings.from_env())
-    findings = monitor_once(client, config.raw, notifier)
+    result = monitor_and_book_once(
+        client,
+        config.raw,
+        notifier,
+        allow_booking=bool(getattr(args, "allow_booking", False)),
+        max_rounds=int(getattr(args, "max_booking_rounds", 3)),
+    )
     print(
         json.dumps(
-            {"ok": True, "mode": "monitor_once", "findings": findings},
+            {"ok": True, "mode": "monitor_once", **result},
             ensure_ascii=False,
             indent=2,
         )
     )
+    return 0
+
+
+def _run_scheduled_book_once(args: argparse.Namespace) -> int:
+    config = load_config(args.config)
+    client = BookingReadClient.login(_credentials(False))
+    result = scheduled_book_once(
+        client,
+        config.raw,
+        today=args.today or datetime.now(ZoneInfo("Asia/Shanghai")).date(),
+        allow_booking=bool(args.allow_booking),
+    )
+    print(json.dumps({"ok": True, **result}, ensure_ascii=False, indent=2))
     return 0
 
 
@@ -146,6 +194,8 @@ def main(argv: list[str] | None = None) -> int:
             return _run_probe(args)
         if args.command == "monitor-once":
             return _run_monitor_once(args)
+        if args.command == "scheduled-book-once":
+            return _run_scheduled_book_once(args)
     except (ConfigurationError, ValueError) as exc:
         print(f"输入或配置错误：{exc}", file=sys.stderr)
         return 2

@@ -1,6 +1,7 @@
 # 配置与部署准备
 
-项目目前处于只读联调和预约接口验证阶段：可以验证登录、查询场馆列表、统计未结束预约，并读取指定场馆在指定日期的日程；正式预约、定时触发和监控自动预约仍保持关闭。
+项目默认仍以只读方式运行，但预约提交链路已经实现。只有明确传入
+`--allow-booking` 时才会提交，配置示例中的定时任务和监控任务也默认关闭。
 
 ## 本地安装
 
@@ -66,8 +67,9 @@ FUDAN_TOTP_SECRET       可选，仅在 UIS 明确要求 TOTP 时使用
 
 请不要在聊天中发送密码或 TOTP 种子。
 
-无论仓库是公开还是私有，建立并添加 GitHub Secrets 后，都可以在 Actions 页面手动运行
-`Read-only booking probe`。该工作流没有定时触发器，也不会调用预约提交接口。
+建立并添加 GitHub Secrets 后，可以在 Actions 页面手动运行只读探测、定时策略演练和监控。
+预约工作流的 `allow_booking` 输入默认是关闭的；第一次真实预约前，应先运行不带该开关的
+演练，确认日期、场馆、时段和策略输出正确，再手动打开一次。
 
 ## 公开仓库是否可行
 
@@ -104,8 +106,7 @@ NOTIFICATION_EMAIL
 
 预约站点目前会在 CAS 兑换和业务接口前返回瑞数 JavaScript 校验。项目使用
 `challenge/cas_bridge.mjs` 在 GitHub Actions 内执行该校验，不启动浏览器。桥接进程只允许
-读取场馆、日程和预约列表这三个接口；预约提交只允许固定的体育场馆端点，默认使用账号侧
-已填写的联系方式，正式工作流尚未启用。
+读取场馆、日程和预约列表，并额外允许固定的体育场馆预约端点；默认使用账号侧已填写的联系方式。
 
 本地需要 Node 24 和 pnpm。确认 `node --version` 为 24.x 后，可以把 `FUDAN_NODE_BIN=node`
 写入未提交的 `.env`：
@@ -115,8 +116,25 @@ cd challenge
 pnpm install --frozen-lockfile
 ```
 
-然后运行只读探测时设置 `FUDAN_NODE_BIN=node`。GitHub Actions 会自动安装 Node 24、pnpm
+然后运行探测或演练时设置 `FUDAN_NODE_BIN=node`。GitHub Actions 会自动安装 Node 24、pnpm
 和桥接依赖。CAS 票据只通过标准输入传给桥接进程，不写入日志。
+
+## 本地预约演练和真实预约
+
+先运行定时策略演练（只查询，不提交）：
+
+```bash
+fudan-booking scheduled-book-once --config config/config.example.yaml
+```
+
+监控任务也默认只提醒；只有监控任务设置为 `auto_book_if_capacity`，并显式增加开关时才会预约：
+
+```bash
+fudan-booking monitor-once --config config/config.example.yaml --allow-booking
+```
+
+每次提交前都会重新检查未结束预约数量。提交期间若空位被抢走，会输出
+`slot_unavailable` 并继续尝试其他候选，不会使任务失败；达到三个未结束预约后只监控、不再提交。
 
 ## Cloudflare
 

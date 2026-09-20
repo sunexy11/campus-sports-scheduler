@@ -37,6 +37,7 @@ class FakeBookingBridge:
         return BookingResponse(self.payload)
 
 
+
 class FakeSession:
     def __init__(self, responses: list[dict]) -> None:
         self.headers = {}
@@ -136,6 +137,7 @@ def test_schedule_is_normalized_without_exposing_occupants() -> None:
     assert availability.sub_resource_ids == (939, 940)
     assert availability.periods[0].available is True
     assert availability.periods[0].available_sub_resources == 1
+    assert availability.periods[0].available_sub_resource_ids == (939,)
     assert availability.periods[1].available is False
 
 
@@ -264,6 +266,21 @@ def test_submit_booking_classifies_normal_racing_rejections() -> None:
     )
 
     assert result == result.__class__(False, "existing_reservation")
+
+
+def test_submit_booking_classifies_slot_race_without_raising() -> None:
+    session = FakeSession([])
+    bridge = FakeBookingBridge({"e": "ERROR", "m": "该场地已被预约"})
+    session._fudan_cas_bridge = bridge
+
+    result = BookingReadClient(session).submit_booking(
+        group_id=938,
+        sub_resource_ids=(939,),
+        period_id=3800,
+        target_date=date(2026, 9, 22),
+    )
+
+    assert result == result.__class__(False, "slot_unavailable")
 
 
 def test_submit_booking_allows_server_side_default_contact() -> None:

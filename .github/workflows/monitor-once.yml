@@ -2,6 +2,12 @@ name: Monitor booking slots once
 
 on:
   workflow_dispatch:
+    inputs:
+      allow_booking:
+        description: Allow auto_book_if_capacity jobs to submit reservations
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -43,4 +49,8 @@ jobs:
             echo "FUDAN_USERNAME and FUDAN_PASSWORD are required." >&2
             exit 2
           fi
-          fudan-booking monitor-once --config config/config.example.yaml
+          args=(monitor-once --config config/config.example.yaml)
+          if [[ "${{ inputs.allow_booking }}" == "true" ]]; then
+            args+=(--allow-booking)
+          fi
+          fudan-booking "${args[@]}"

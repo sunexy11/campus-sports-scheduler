@@ -30,6 +30,7 @@ class PeriodAvailability:
     time: str
     available_sub_resources: int
     total_sub_resources: int
+    available_sub_resource_ids: tuple[int, ...] = ()
 
     @property
     def available(self) -> bool:
@@ -67,8 +68,42 @@ class BookingSubmission:
     process_id: int | None = None
 
 
+def _booking_rejection_reason(message: str) -> str | None:
+    """Classify expected, non-fatal responses from a racing submit.
+
+    The exact Chinese wording has changed between deployments, so matching is
+    deliberately based on stable concepts.  Authentication, anti-bot and
+    server errors remain exceptions and therefore still fail the run.
+    """
+
+    if not message:
+        return None
+    if "未结束的预约" in message or "已有未结束" in message:
+        return "existing_reservation"
+    if "服务时间" in message:
+        return "not_in_service_time"
+    if any(
+        token in message
+        for token in (
+            "已被预约",
+            "已被占用",
+            "无空闲",
+            "没有空余",
+            "约满",
+            "已满",
+            "已过期",
+            "不可预约",
+            "预约冲突",
+            "资源冲突",
+            "当前存在未提交",
+        )
+    ):
+        return "slot_unavailable"
+    return None
+
+
 class BookingReadClient:
-    """Read-only booking API client used before live-booking approval."""
+    """Booking API client with read methods and one fixed submit surface."""
 
     def __init__(self, session: requests.Session) -> None:
         self.session = session
@@ -162,6 +197,10 @@ class BookingReadClient:
         try:
             response.raise_for_status()
         except requests.HTTPError as exc:
+            # A 409/422 is the normal optimistic-concurrency outcome: the
+            # slot disappeared between the calendar read and the submit.
+            if response.status_code in {409, 422}:
+                return BookingSubmission(False, "slot_unavailable")
             self._json(response, "booking submission")
             raise BookingError("booking submission failed") from exc
         try:
@@ -171,11 +210,9 @@ class BookingReadClient:
         if not isinstance(body, dict):
             raise BookingError("booking submission returned invalid data")
         if body.get("e") != "OK":
-            message = str(body.get("m") or "")
-            if "服务时间" in message:
-                return BookingSubmission(False, "not_in_service_time")
-            if "未结束的预约" in message:
-                return BookingSubmission(False, "existing_reservation")
+            reason = _booking_rejection_reason(str(body.get("m") or ""))
+            if reason is not None:
+                return BookingSubmission(False, reason)
             raise BookingError("booking submission was rejected")
         data = body.get("d")
         if not isinstance(data, dict):
@@ -326,6 +363,7 @@ class BookingReadClient:
             period_id = int(item["id"])
             label = str(item.get("str_time") or period_id)
             available_count = 0
+            available_ids: list[int] = []
             for sub_resource_id in sub_resource_ids:
                 slots = date_data.get(
                     str(sub_resource_id), date_data.get(sub_resource_id, {})
@@ -344,12 +382,14 @@ class BookingReadClient:
                     remaining = 0
                 if slot.get("status") == 0 and remaining > 0:
                     available_count += 1
+                    available_ids.append(sub_resource_id)
             periods.append(
                 PeriodAvailability(
                     period_id=period_id,
                     time=label,
                     available_sub_resources=available_count,
                     total_sub_resources=len(sub_resource_ids),
+                    available_sub_resource_ids=tuple(available_ids),
                 )
             )
 
