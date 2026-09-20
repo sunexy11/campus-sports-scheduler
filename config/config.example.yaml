@@ -32,11 +32,11 @@ monitor:
   active_start: "07:00"
   active_end: "24:00"
   jobs:
-    - name: 北区晚间羽毛球
-      venue: 北区体育馆
-      sport: 羽毛球
+    - name: 国权路网球场
+      venue: 国权路运动场
+      sport: 网球
       dates: next_3_days
-      times: ["19:00-20:00", "20:00-21:00"]
+      times: ["12:00-13:00", "15:00-16:00"]
       mode: auto_book_if_capacity
       max_new_reservations: 1
 
