@@ -32,11 +32,11 @@ monitor:
   active_start: "07:00"
   active_end: "24:00"
   jobs:
-    - name: 国权路网球场
-      venue: 国权路运动场
+    - name: 北区网球场
+      venue: 本北高速室外网球场
       sport: 网球
       dates: next_3_days
-      times: ["12:00-13:00", "15:00-16:00"]
+      times: ["10:00-11:00", "9:00-10:00"]
       mode: auto_book_if_capacity
       max_new_reservations: 1
 
