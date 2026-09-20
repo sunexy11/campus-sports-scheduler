@@ -6,7 +6,7 @@ limits:
   auto_cancel: false
 
 scheduled_jobs:
-  - name: 后天北区体育馆乒乓球
+  - name: 后天正大北区羽毛球
     enabled: true
     date_offset: 2
     action_start: "11:57"
@@ -16,11 +16,14 @@ scheduled_jobs:
     max_new_reservations: 2
     fallback_to_single_slot: true
     preferences:
-      - venue: 北区体育馆
-        sport: 乒乓球
+      - venue: 正大体育馆
+        sport: 羽毛球
         blocks:
-          - ["09:00-10:00", "10:00-11:00"]
-          - ["12:00-13:00"]
+          - ["19:00-20:00", "20:00-21:00", "21:00-22:00"]
+      - venue: 北区体育馆
+        sport: 羽毛球
+        blocks:
+          - ["19:00-20:00", "20:00-21:00"]
 
 monitor:
   enabled: false
