@@ -1,11 +1,11 @@
 name: Book at opening time
 
-# Planned schedule: 03:48 UTC = 11:48 Asia/Shanghai. The workflow logs in as
-# soon as the environment is ready, then waits until 11:53 before submitting.
+# Planned schedule: 22:50 UTC = 06:50 Asia/Shanghai. The workflow logs in as
+# soon as the environment is ready, then waits until 07:00 before submitting.
 on:
   schedule:
-    # 03:48 UTC = 11:48 Asia/Shanghai.
-    - cron: "48 3 * * *"
+    # 22:50 UTC = 06:50 Asia/Shanghai.
+    - cron: "50 22 * * *"
   workflow_dispatch:
     inputs:
       allow_booking:
@@ -54,8 +54,8 @@ jobs:
           fi
           args=(scheduled-book-once --config config/config.example.yaml)
           if [[ "${{ github.event_name }}" == "schedule" ]]; then
-            # The 11:48 runner logs in after setup and waits until 11:53.
-            args+=(--wait-until 11:53)
+            # The 06:50 runner logs in after setup and waits until 07:00.
+            args+=(--wait-until 07:00)
           fi
           if [[ "${{ github.event_name }}" == "schedule" || "${{ inputs.allow_booking }}" == "true" ]]; then
             args+=(--allow-booking)
