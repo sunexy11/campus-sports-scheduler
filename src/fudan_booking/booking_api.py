@@ -15,6 +15,7 @@ BOOKING_BASE = "https://booking.fudan.edu.cn"
 BOOKING_CAS_SERVICE = f"{BOOKING_BASE}/reservation/api/login/cas"
 SPORTS_TOPIC_ID = 48
 SPORTS_PAGE = f"{BOOKING_BASE}/reservation/fe/site/special/special?id={SPORTS_TOPIC_ID}"
+DETAIL_MOBILE_ENDPOINT = f"{BOOKING_BASE}/reservation/site/user/detail-mobile"
 
 
 def normalize_time_range(value: str) -> str:
@@ -147,11 +148,11 @@ class BookingReadClient:
         phone: str = "",
         number: int = 1,
     ) -> BookingSubmission:
-        """Submit one sports booking; an empty phone uses the server default.
+        """Submit one sports booking; an empty phone follows the web form.
 
         Cancellation is intentionally not supported. The optional phone is only
-        an override; normal calls send an empty contact collection so the site
-        can use the contact value already associated with the account.
+        an override; bridge-backed calls read the authenticated account mobile,
+        matching the contact collection populated by the web form.
         """
 
         if group_id <= 0 or period_id <= 0:
@@ -160,6 +161,13 @@ class BookingReadClient:
             raise ValueError("sub_resource_ids must contain positive IDs")
         if not 1 <= number <= 100:
             raise ValueError("number must be between 1 and 100")
+
+        bridge = getattr(self.session, "_fudan_cas_bridge", None)
+        effective_phone = phone
+        if not effective_phone and bridge is not None:
+            # 网页预约表单会自动填入账号手机号；部分资源将该字段标记为必填。
+            # 只在真实桥接提交前读取，不把手机号写入配置或日志。
+            effective_phone = self.default_mobile()
 
         payload = {
             "data": json.dumps(
@@ -179,14 +187,14 @@ class BookingReadClient:
                 [
                     {
                         "name": "手机号",
-                        "value": phone,
+                        "value": effective_phone,
                         "verify": None,
                         "type": "mobile",
                     }
                 ],
                 ensure_ascii=False,
             )
-            if phone
+            if effective_phone
             else "[]",
             "code": "",
             "number": number,
@@ -194,14 +202,13 @@ class BookingReadClient:
             "captcha": json.dumps({"token": "", "pointJson": ""}),
         }
         endpoint = f"{BOOKING_BASE}/reservation/site/resource/launch"
-        bridge = getattr(self.session, "_fudan_cas_bridge", None)
         if bridge is not None:
             response = bridge.book_resource(
                 group_id=group_id,
                 sub_resource_ids=sub_resource_ids,
                 period_id=period_id,
                 target_date=target_date.isoformat(),
-                phone=phone,
+                phone=effective_phone,
                 number=number,
             )
         else:
@@ -241,6 +248,14 @@ class BookingReadClient:
             "submitted",
             int(process_id) if process_id is not None else None,
         )
+
+    def default_mobile(self) -> str:
+        """Return the authenticated account mobile used by the web form."""
+
+        response = self._get(DETAIL_MOBILE_ENDPOINT, timeout=20)
+        data = self._json(response, "account contact")
+        mobile = data.get("mobile")
+        return str(mobile) if mobile else ""
 
     @classmethod
     def login(cls, credentials: UISCredentials) -> BookingReadClient:
@@ -437,7 +452,16 @@ class BookingReadClient:
         for item in items:
             if not isinstance(item, dict):
                 continue
-            if str(item.get("is_cancel")) == "1" or str(item.get("status")) == "0":
+            status_name = str(item.get("status_name") or "")
+            if status_name in {"已取消", "已结束", "已过期", "已驳回"}:
+                continue
+            # The API uses is_cancel=1 to mean that cancellation is available
+            # (therefore the reservation is still active); is_cancel=0 is the
+            # cancelled/non-cancellable state.  Older responses without a
+            # status name still use status=0 for the cancelled state.
+            if item.get("is_cancel") is not None and str(item.get("is_cancel")) != "1":
+                continue
+            if not status_name and str(item.get("status")) == "0":
                 continue
             detail = item.get("detail")
             if isinstance(detail, dict):

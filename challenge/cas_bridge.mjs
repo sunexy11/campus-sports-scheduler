@@ -2,6 +2,7 @@ import { createInterface } from "node:readline";
 
 const sdenv = await import("sdenv");
 const jsdomFromUrl = sdenv.jsdomFromUrl;
+const jsdomFromText = sdenv.jsdomFromText;
 const jsdom = sdenv.jsdom || sdenv.default.jsdom;
 const logger = sdenv.logger;
 
@@ -9,6 +10,8 @@ const logger = sdenv.logger;
 logger.level = "off";
 
 const BOOKING_HOST = "booking.fudan.edu.cn";
+const SPORTS_REFERER =
+  "https://booking.fudan.edu.cn/reservation/fe/site/special/special?id=48";
 const USER_AGENT =
   "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " +
   "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
@@ -16,6 +19,8 @@ const READ_ONLY_PATHS = new Set([
   "/reservation/api/topic/resource-list",
   "/reservation/api/resource/large-screen",
   "/reservation/site/resource/calendar",
+  "/reservation/site/resource/detail",
+  "/reservation/site/user/detail-mobile",
   "/reservation/site/appointment/appointment-list",
 ]);
 const BOOKING_PATH = "/reservation/site/resource/launch";
@@ -97,7 +102,7 @@ async function fetchBookingPost(url, cookieJar, referer, body) {
       "Sec-Fetch-Mode": "cors",
       "Sec-Fetch-Dest": "empty",
       "User-Agent": USER_AGENT,
-      Referer: referer,
+      Referer: SPORTS_REFERER,
     },
     body,
     redirect: "manual",
@@ -107,6 +112,69 @@ async function fetchBookingPost(url, cookieJar, referer, body) {
     cookieJar.setCookieSync(item, current.toString(), { ignoreError: true });
   }
   return response;
+}
+
+async function executePostChallenge(response, cookieJar, referer) {
+  const contentType = response.headers.get("content-type") || "";
+  if (response.status !== 412 || !contentType.includes("text/html")) {
+    return false;
+  }
+  const html = await response.text();
+  if (html.length > 4 * 1024 * 1024) {
+    throw new Error("anti-bot challenge is too large");
+  }
+  let exitResolve;
+  const exited = new Promise((resolve) => {
+    exitResolve = resolve;
+  });
+  class SameHostResourceLoader extends jsdom.ResourceLoader {
+    fetch(url, options = {}) {
+      const parsed = new URL(url);
+      if (parsed.protocol !== "https:" || parsed.hostname !== BOOKING_HOST) {
+        return null;
+      }
+      return super.fetch(url, {
+        ...options,
+        headers: {
+          ...(options.headers || {}),
+          Cookie: cookieJar.getCookieStringSync(url),
+          Referer: referer,
+          "User-Agent": USER_AGENT,
+        },
+      });
+    }
+  }
+  const dom = await jsdomFromText(html, {
+    url: response.url,
+    referrer: referer,
+    cookieJar,
+    runScripts: "dangerously",
+    resources: new SameHostResourceLoader({
+      strictSSL: false,
+      userAgent: USER_AGENT,
+    }),
+    beforeParse(window) {
+      window.addEventListener("sdenv:exit", (event) => {
+        const eventId = event.detail?.eventId;
+        const nextUrl = event.detail?.url;
+        if (["location.replace", "location.assign"].includes(eventId) && nextUrl) {
+          exitResolve(nextUrl);
+        }
+      });
+    },
+    consoleConfig: {
+      log: () => {},
+      info: () => {},
+      warn: () => {},
+      error: () => {},
+    },
+  });
+  await Promise.race([
+    exited,
+    new Promise((resolve) => setTimeout(resolve, 15000)),
+  ]);
+  dom.window.close();
+  return true;
 }
 
 function positiveInteger(value, name) {
@@ -223,12 +291,23 @@ async function handle(request) {
 async function handleBooking(request) {
   if (!state) throw new Error("bridge session is not initialized");
   const form = bookingForm(request);
-  const response = await fetchBookingPost(
+  let response = await fetchBookingPost(
     `${"https://"}${BOOKING_HOST}${BOOKING_PATH}`,
     state.cookieJar,
     state.ticketUrl,
     form,
   );
+  if (response.status === 412) {
+    const challenged = await executePostChallenge(response, state.cookieJar, state.ticketUrl);
+    if (challenged) {
+      response = await fetchBookingPost(
+        `${"https://"}${BOOKING_HOST}${BOOKING_PATH}`,
+        state.cookieJar,
+        state.ticketUrl,
+        form,
+      );
+    }
+  }
   const body = await response.text();
   if (body.length > 4 * 1024 * 1024) throw new Error("response is too large");
   return {

@@ -7,6 +7,8 @@
 - 只接受 `booking.fudan.edu.cn` 的 HTTPS 票据 URL；
 - 票据只通过标准输入传递，不写入日志、文件或 GitHub Actions 输出；
 - 标准输入输出使用逐行 JSON 协议，便于 Python 读取接口响应；
-- 默认只允许场馆列表、日程和预约列表三个 GET 接口；另有一个固定的
-  `book_resource` 操作，只能 POST 体育场馆预约端点，不接受任意 URL、取消端点或其他 POST；
+- 默认只允许场馆列表、日程、预约列表，以及预约表单所需的资源详情和账号联系方式 GET 接口；
+  另有一个固定的 `book_resource` 操作，只能 POST 体育场馆预约端点，不接受任意 URL、取消端点或其他 POST。
+- 如果预约 POST 返回同域瑞数 412 HTML，桥只执行一次该挑战脚本并重试原 POST；挑战脚本的外部资源仅允许从
+  `booking.fudan.edu.cn` 加载。
 - `sdenv` 版本固定，避免反爬脚本变化时无提示升级。

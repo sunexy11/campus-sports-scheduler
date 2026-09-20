@@ -41,6 +41,9 @@ class FakeBookingBridge:
         self.calls.append(kwargs)
         return BookingResponse(self.payload)
 
+    def get(self, url, **kwargs):
+        return BookingResponse({"e": "OK", "d": {"mobile": "13800000000"}})
+
 
 
 class FakeSession:
@@ -92,10 +95,10 @@ def test_unfinished_list_excludes_cancelled_and_past_reservations() -> None:
                 "e": "OK",
                 "d": {
                     "data": [
-                        {"id": 1, "is_cancel": 1, "detail": {"2099-01-01": []}},
+                        {"id": 1, "is_cancel": 0, "detail": {"2099-01-01": []}},
                         {"id": 2, "status": 0, "detail": {"2099-01-01": []}},
                         {"id": 3, "status": 3, "detail": {"2020-01-01": []}},
-                        {"id": 4, "status": 3, "detail": {"2099-01-01": []}},
+                        {"id": 4, "status": 3, "is_cancel": 1, "detail": {"2099-01-01": []}},
                     ]
                 },
             }
@@ -103,7 +106,7 @@ def test_unfinished_list_excludes_cancelled_and_past_reservations() -> None:
     )
     client = BookingReadClient(session)
     assert client.list_unfinished() == [
-        {"id": 4, "status": 3, "detail": {"2099-01-01": []}}
+        {"id": 4, "status": 3, "is_cancel": 1, "detail": {"2099-01-01": []}}
     ]
 
 
@@ -288,7 +291,7 @@ def test_submit_booking_classifies_slot_race_without_raising() -> None:
     assert result == result.__class__(False, "slot_unavailable")
 
 
-def test_submit_booking_allows_server_side_default_contact() -> None:
+def test_submit_booking_uses_authenticated_default_contact() -> None:
     session = FakeSession([])
     bridge = FakeBookingBridge({"e": "OK", "d": {}})
     session._fudan_cas_bridge = bridge
@@ -301,4 +304,4 @@ def test_submit_booking_allows_server_side_default_contact() -> None:
     )
 
     assert result.ok is True
-    assert bridge.calls[0]["phone"] == ""
+    assert bridge.calls[0]["phone"] == "13800000000"
