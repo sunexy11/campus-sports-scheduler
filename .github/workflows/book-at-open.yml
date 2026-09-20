@@ -54,6 +54,12 @@ jobs:
             exit 2
           fi
           args=(scheduled-book-once --config config/config.example.yaml)
+          if [[ "${{ github.event_name }}" == "schedule" ]]; then
+            # The 06:50 runner gets the Python/Node environment ready first;
+            # login starts around 06:55 and the command waits until 07:00.
+            sleep 300
+            args+=(--wait-until 07:00)
+          fi
           if [[ "${{ github.event_name }}" == "schedule" || "${{ inputs.allow_booking }}" == "true" ]]; then
             args+=(--allow-booking)
           fi

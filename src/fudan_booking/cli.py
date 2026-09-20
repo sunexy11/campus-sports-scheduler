@@ -5,6 +5,7 @@ import getpass
 import json
 import os
 import sys
+import time
 from datetime import date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -77,6 +78,10 @@ def _build_parser() -> argparse.ArgumentParser:
         "--today",
         type=date.fromisoformat,
         help="override today for a deterministic local test (YYYY-MM-DD)",
+    )
+    scheduled.add_argument(
+        "--wait-until",
+        help="wait until HH:MM Asia/Shanghai after login before querying/submitting",
     )
     return parser
 
@@ -162,6 +167,13 @@ def _run_monitor_once(args: argparse.Namespace) -> int:
 def _run_scheduled_book_once(args: argparse.Namespace) -> int:
     config = load_config(args.config)
     client = BookingReadClient.login(_credentials(False))
+    if args.wait_until:
+        hour_text, minute_text = args.wait_until.split(":", 1)
+        target_minutes = int(hour_text) * 60 + int(minute_text)
+        now = datetime.now(ZoneInfo("Asia/Shanghai"))
+        current_minutes = now.hour * 60 + now.minute
+        if target_minutes > current_minutes:
+            time.sleep((target_minutes - current_minutes) * 60 - now.second)
     result = scheduled_book_once(
         client,
         config.raw,
