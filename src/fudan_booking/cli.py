@@ -15,6 +15,8 @@ from .auth import UISCredentials
 from .booking_api import BookingReadClient
 from .config import load_config
 from .errors import BookingError, ConfigurationError
+from .monitor import monitor_once
+from .notifier import QQSMTPNotifier, QQSMTPSettings
 
 
 def _load_local_env() -> None:
@@ -43,6 +45,10 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     probe.add_argument("--resource-id", type=int, help="optional resource ID to inspect")
     probe.add_argument("--date", type=date.fromisoformat, help="schedule date in YYYY-MM-DD")
+
+    monitor = commands.add_parser("monitor-once", help="check configured slots once")
+    monitor.add_argument("--config", required=True)
+    monitor.add_argument("--no-email", action="store_true", help="do not send QQ email")
     return parser
 
 
@@ -101,6 +107,23 @@ def _run_probe(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_monitor_once(args: argparse.Namespace) -> int:
+    config = load_config(args.config)
+    client = BookingReadClient.login(_credentials(False))
+    notifier = None
+    if not args.no_email:
+        notifier = QQSMTPNotifier(QQSMTPSettings.from_env())
+    findings = monitor_once(client, config.raw, notifier)
+    print(
+        json.dumps(
+            {"ok": True, "mode": "monitor_once", "findings": findings},
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     _load_local_env()
     args = _build_parser().parse_args(argv)
@@ -121,6 +144,8 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.command == "probe":
             return _run_probe(args)
+        if args.command == "monitor-once":
+            return _run_monitor_once(args)
     except (ConfigurationError, ValueError) as exc:
         print(f"输入或配置错误：{exc}", file=sys.stderr)
         return 2
