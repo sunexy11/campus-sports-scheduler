@@ -108,6 +108,12 @@ def _booking_rejection_reason(message: str) -> str | None:
             "时间段重叠",
             "不能重复预约",
             "已有相同时间段预约",
+            "预约重复",
+            "同一时间段",
+            "同一时段",
+            "同一时间",
+            "重叠",
+            "重复",
         )
     ):
         return "overlap_with_existing"
@@ -249,10 +255,15 @@ class BookingReadClient:
         if not isinstance(body, dict):
             raise BookingError("booking submission returned invalid data")
         if body.get("e") != "OK":
-            reason = _booking_rejection_reason(str(body.get("m") or ""))
+            message = str(body.get("m") or "").strip()
+            reason = _booking_rejection_reason(message)
             if reason is not None:
                 return BookingSubmission(False, reason)
-            raise BookingError("booking submission was rejected")
+            # Keep an unknown business rejection diagnosable without dumping
+            # the complete response (which may contain unrelated fields).
+            detail = " ".join(message.split())[:160]
+            suffix = f": {detail}" if detail else ""
+            raise BookingError(f"booking submission was rejected{suffix}")
         data = body.get("d")
         if not isinstance(data, dict):
             raise BookingError("booking submission returned invalid result")
