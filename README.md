@@ -14,7 +14,7 @@ GitHub Actions 需要 Node 24 与 challenge 依赖，Python 会在同一进程�
 - 子场地由系统随机分配，配置单位是“场馆 + 球类”。
 - 达到三个预约后继续监控和提醒，但不再自动预约。
 - 本项目永远不会自动取消已有预约。
-- 当前示例的 GitHub Actions 每天 11:48 启动，环境准备完成后登录，11:53 提交后天预约。
+- 当前示例的 GitHub Actions 每天 06:50 启动，环境准备完成后登录，07:00 提交后天预约。
 - 监控暂不部署到 Cloudflare Worker；当前 Node/JSDOM 会话桥先在 GitHub Actions/Node 环境验证。
 - 通知仅使用 QQ SMTP。
 

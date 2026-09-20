@@ -2,7 +2,7 @@
 
 ## 运行职责划分
 
-- GitHub Actions 当前示例每天 11:48 启动任务，环境准备完成后登录，并在 11:53 提交预约。
+- GitHub Actions 当前示例每天 06:50 启动任务，环境准备完成后登录，并在 07:00 提交预约。
 - GitHub Actions 中的 Node/JSDOM 桥负责执行预约站点的瑞数校验；Python 和桥在同一个任务内保持预约会话。
 - Cloudflare Workers 暂不承担预约系统请求：当前接口的瑞数校验需要 Node/JSDOM 的运行环境，Workers 不能直接复用这套会话。
 - 监控频率和部署平台需要在只读桥稳定后重新评估；GitHub Actions 每五分钟全天运行会超出私有仓库免费额度。
