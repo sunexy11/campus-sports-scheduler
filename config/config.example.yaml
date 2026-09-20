@@ -6,25 +6,21 @@ limits:
   auto_cancel: false
 
 scheduled_jobs:
-  - name: 后天晚间羽毛球
-    enabled: false
+  - name: 后天北区体育馆乒乓球
+    enabled: true
     date_offset: 2
-    action_start: "06:50"
-    login_at: "06:55"
-    submit_at: "07:00"
+    action_start: "11:48"
+    login_at: "11:48"
+    submit_at: "11:53"
     strategy: consecutive_first
     max_new_reservations: 2
     fallback_to_single_slot: true
     preferences:
       - venue: 北区体育馆
-        sport: 羽毛球
+        sport: 乒乓球
         blocks:
-          - ["19:00-20:00", "20:00-21:00"]
-          - ["18:00-19:00", "19:00-20:00"]
-      - venue: 正大体育馆
-        sport: 羽毛球
-        blocks:
-          - ["19:00-20:00", "20:00-21:00"]
+          - ["09:00-10:00", "10:00-11:00"]
+          - ["12:00-13:00"]
 
 monitor:
   enabled: false
@@ -32,13 +28,13 @@ monitor:
   active_start: "07:00"
   active_end: "24:00"
   jobs:
-    - name: 北区网球场
-      venue: 本北高速室外网球场
-      sport: 网球
-      dates: next_3_days
-      times: ["10:00-11:00", "9:00-10:00"]
+    - name: 北区体育馆乒乓
+      venue: 北区体育馆
+      sport: 乒乓球
+      dates: [0, 1, 2]
+      times: ["10:00-11:00", "09:00-10:00", "12:00-13:00"]
       mode: auto_book_if_capacity
-      max_new_reservations: 1
+      max_new_reservations: 2
 
 notification:
   provider: qq_smtp
@@ -47,4 +43,3 @@ notification:
   notify_on_booking_failure: true
   notify_on_auth_expired: true
   notify_on_rate_limit: true
-

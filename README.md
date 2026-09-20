@@ -2,7 +2,7 @@
 
 复旦体育场馆定时预约与空位监控工具。
 
-默认以只读联调为主：配置校验、最多三个未结束预约的容量控制、连续时段优先策略、QQ SMTP 通知适配器、UIS 登录和网页日历查询已经建立。受控的体育场馆预约提交也已加入，但必须显式传入 `--allow-booking`，配置示例中的预约任务默认关闭。
+默认以只读联调为主：配置校验、最多三个未结束预约的容量控制、连续时段优先策略、QQ SMTP 通知适配器、UIS 登录和网页日历查询已经建立。受控的体育场馆预约提交也已加入，但必须显式传入 `--allow-booking`；GitHub Actions 的定时事件会显式传入该开关。
 
 预约站点目前有瑞数 JavaScript 校验。项目已加入不启动浏览器的 Node/JSDOM 校验桥；本地和
 GitHub Actions 需要 Node 24 与 challenge 依赖，Python 会在同一进程会话中查询只读接口。
@@ -14,7 +14,7 @@ GitHub Actions 需要 Node 24 与 challenge 依赖，Python 会在同一进程�
 - 子场地由系统随机分配，配置单位是“场馆 + 球类”。
 - 达到三个预约后继续监控和提醒，但不再自动预约。
 - 本项目永远不会自动取消已有预约。
-- GitHub Actions 计划为 06:50 启动、06:55 登录、07:00 提交。
+- 当前示例的 GitHub Actions 每天 11:48 启动，环境准备完成后登录，11:53 提交后天预约。
 - 监控暂不部署到 Cloudflare Worker；当前 Node/JSDOM 会话桥先在 GitHub Actions/Node 环境验证。
 - 通知仅使用 QQ SMTP。
 

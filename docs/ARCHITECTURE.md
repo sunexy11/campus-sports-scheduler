@@ -2,7 +2,7 @@
 
 ## 运行职责划分
 
-- GitHub Actions 负责每天 06:50 启动任务、06:55 登录，并在 07:00 提交预约。
+- GitHub Actions 当前示例每天 11:48 启动任务，环境准备完成后登录，并在 11:53 提交预约。
 - GitHub Actions 中的 Node/JSDOM 桥负责执行预约站点的瑞数校验；Python 和桥在同一个任务内保持预约会话。
 - Cloudflare Workers 暂不承担预约系统请求：当前接口的瑞数校验需要 Node/JSDOM 的运行环境，Workers 不能直接复用这套会话。
 - 监控频率和部署平台需要在只读桥稳定后重新评估；GitHub Actions 每五分钟全天运行会超出私有仓库免费额度。
@@ -83,5 +83,6 @@
 4. 在 GitHub Actions 或其他可运行 Node 24 的环境中验证会话复用；Cloudflare Worker 暂不纳入主链路。
 5. 对用户指定的目标执行一次不提交的演练（`scheduled-book-once` 不带开关）。
 6. 经用户确认后手动运行一次带 `--allow-booking` 的真实预约。
-7. 上述步骤全部通过后，再把配置中的 `scheduled_jobs[].enabled` 改为 `true`，启用每天定时预约。
+7. 当前示例已经将目标定时任务设置为 `scheduled_jobs[].enabled: true`；如果只想干跑，先改回
+   `false`，或使用手动 Actions 并保持 `allow_booking: false`。
 8. “仅提醒”监控稳定后，再将监控任务设置为 `auto_book_if_capacity` 并在 Actions 手动输入允许预约。
