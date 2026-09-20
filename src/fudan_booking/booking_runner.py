@@ -99,6 +99,7 @@ def scheduled_book_once(
         else 3
     )
     successful_total = 0
+    initial_unfinished: int | None = None
     for job in jobs:
         target_date = today + timedelta(days=int(job.get("date_offset", 2)))
         candidates, details = _scheduled_candidates(client, job, resources, target_date)
@@ -119,8 +120,14 @@ def scheduled_book_once(
         for slot in candidates:
             if successful >= max_new:
                 break
-            unfinished = client.list_unfinished()
-            if len(unfinished) + successful_total >= max_unfinished:
+            unfinished_count = len(client.list_unfinished())
+            if initial_unfinished is None:
+                initial_unfinished = unfinished_count
+            effective_unfinished = max(
+                unfinished_count,
+                initial_unfinished + successful_total,
+            )
+            if effective_unfinished >= max_unfinished:
                 item["stop_reason"] = "capacity_reached"
                 break
             resource_id, period_id, sub_ids = details[slot]

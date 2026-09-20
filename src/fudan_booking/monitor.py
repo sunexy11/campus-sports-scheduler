@@ -158,6 +158,7 @@ def monitor_and_book_once(
     latest_internal: list[dict[str, Any]] = []
     successful_by_job: dict[int, int] = {}
     successful_total = 0
+    initial_unfinished: int | None = None
     max_unfinished = _max_unfinished_reservations(config)
     stop_reason = "no_findings"
 
@@ -190,8 +191,14 @@ def monitor_and_book_once(
             if key in attempted:
                 continue
             attempted.add(key)
-            unfinished = client.list_unfinished()
-            if len(unfinished) + successful_total >= max_unfinished:
+            unfinished_count = len(client.list_unfinished())
+            if initial_unfinished is None:
+                initial_unfinished = unfinished_count
+            effective_unfinished = max(
+                unfinished_count,
+                initial_unfinished + successful_total,
+            )
+            if effective_unfinished >= max_unfinished:
                 stop_reason = "capacity_reached"
                 break
             result: BookingSubmission = client.submit_booking(

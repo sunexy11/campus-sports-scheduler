@@ -218,3 +218,61 @@ def test_monitor_skips_overlap_and_continues_with_other_slot():
         "submitted",
     ]
     assert len(client.submit_calls) == 2
+
+
+class ExistingReservationClient(OverlapThenSuccessClient):
+    def __init__(self):
+        super().__init__()
+        self.results = iter(
+            [
+                BookingSubmission(False, "overlap_with_existing"),
+                BookingSubmission(True, "submitted", 123),
+                BookingSubmission(True, "submitted", 124),
+            ]
+        )
+        self.unfinished_count = 1
+
+    def get_availability(self, resource_id, target_date):
+        availability = super().get_availability(resource_id, target_date)
+        return ResourceAvailability(
+            resource_id,
+            target_date,
+            availability.sub_resource_ids + (941,),
+            availability.periods
+            + (PeriodAvailability(3802, "21:00-22:00", 1, 3, (941,)),),
+        )
+
+    def list_unfinished(self):
+        return [{} for _ in range(self.unfinished_count)]
+
+    def submit_booking(self, **kwargs):
+        result = super().submit_booking(**kwargs)
+        if result.ok:
+            self.unfinished_count += 1
+        return result
+
+
+def test_monitor_with_one_existing_reservation_can_add_two_until_global_limit():
+    client = ExistingReservationClient()
+    result = monitor_and_book_once(
+        client,
+        {
+            "monitor": {
+                "jobs": [
+                    {
+                        "venue": "北区体育馆",
+                        "sport": "羽毛球",
+                        "dates": ["2026-09-22"],
+                        "times": ["19:00-20:00", "20:00-21:00", "21:00-22:00"],
+                        "mode": "auto_book_if_capacity",
+                        "max_new_reservations": 2,
+                    }
+                ]
+            }
+        },
+        today=date(2026, 9, 20),
+        allow_booking=True,
+    )
+
+    assert len(client.submit_calls) == 3
+    assert [item["ok"] for item in result["booking_results"]] == [False, True, True]
