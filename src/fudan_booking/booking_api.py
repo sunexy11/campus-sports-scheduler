@@ -97,6 +97,20 @@ def _booking_rejection_reason(message: str) -> str | None:
         return None
     if "未结束的预约" in message or "已有未结束" in message:
         return "existing_reservation"
+    if any(
+        token in message
+        for token in (
+            "预约时间不可重叠",
+            "预约时间不能重叠",
+            "时间不可重叠",
+            "时间不能重叠",
+            "预约时间重叠",
+            "时间段重叠",
+            "不能重复预约",
+            "已有相同时间段预约",
+        )
+    ):
+        return "overlap_with_existing"
     if "服务时间" in message:
         return "not_in_service_time"
     if any(

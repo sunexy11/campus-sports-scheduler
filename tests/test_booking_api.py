@@ -291,6 +291,21 @@ def test_submit_booking_classifies_slot_race_without_raising() -> None:
     assert result == result.__class__(False, "slot_unavailable")
 
 
+def test_submit_booking_classifies_overlapping_existing_slot_without_raising() -> None:
+    session = FakeSession([])
+    bridge = FakeBookingBridge({"e": "ERROR", "m": "预约时间不可重叠"})
+    session._fudan_cas_bridge = bridge
+
+    result = BookingReadClient(session).submit_booking(
+        group_id=938,
+        sub_resource_ids=(939,),
+        period_id=3800,
+        target_date=date(2026, 9, 22),
+    )
+
+    assert result == result.__class__(False, "overlap_with_existing")
+
+
 def test_submit_booking_uses_authenticated_default_contact() -> None:
     session = FakeSession([])
     bridge = FakeBookingBridge({"e": "OK", "d": {}})

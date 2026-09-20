@@ -17,8 +17,35 @@ def _target_dates(value: Any, today: date) -> list[date]:
     if value == "next_3_days":
         return [today + timedelta(days=offset) for offset in range(3)]
     if isinstance(value, list):
-        return [date.fromisoformat(str(item)) for item in value]
-    raise ValueError("monitor dates must be next_3_days or a list of YYYY-MM-DD")
+        dates: list[date] = []
+        seen: set[date] = set()
+        for item in value:
+            # Integer offsets are relative to the run date: 0=today,
+            # 1=tomorrow and 2=the day after tomorrow.  Keep accepting
+            # explicit ISO dates so existing configurations remain usable.
+            if isinstance(item, bool):
+                raise TypeError("monitor date offsets must be integers 0, 1 or 2")
+            if isinstance(item, int):
+                if item not in (0, 1, 2):
+                    raise ValueError("monitor date offsets must be integers 0, 1 or 2")
+                target = today + timedelta(days=item)
+            else:
+                target = date.fromisoformat(str(item))
+            if target not in seen:
+                dates.append(target)
+                seen.add(target)
+        return dates
+    raise ValueError(
+        "monitor dates must be next_3_days or a list of offsets (0, 1, 2)"
+        " or YYYY-MM-DD dates"
+    )
+
+
+def _max_unfinished_reservations(config: dict[str, Any]) -> int:
+    limits = config.get("limits")
+    if not isinstance(limits, dict):
+        return 3
+    return int(limits.get("max_unfinished_reservations", 3))
 
 
 def _find_resource(resources: list[ResourceSummary], venue: str, sport: str) -> ResourceSummary:
@@ -126,10 +153,12 @@ def monitor_and_book_once(
         raise ValueError("max_rounds must be positive")
 
     today = today or datetime.now(ZoneInfo("Asia/Shanghai")).date()
-    attempted: set[tuple[str, int, tuple[int, ...]]] = set()
+    attempted: set[tuple[object, ...]] = set()
     booking_results: list[dict[str, Any]] = []
     latest_internal: list[dict[str, Any]] = []
     successful_by_job: dict[int, int] = {}
+    successful_total = 0
+    max_unfinished = _max_unfinished_reservations(config)
     stop_reason = "no_findings"
 
     for round_number in range(1, max_rounds + 1):
@@ -151,12 +180,18 @@ def monitor_and_book_once(
             if successful_by_job.get(job_index, 0) >= int(item["_max_new_reservations"]):
                 continue
             sub_resource_ids = tuple(item["_available_sub_resource_ids"])
-            key = (item["date"], int(item["_period_id"]), sub_resource_ids)
+            key = (
+                job_index,
+                int(item["resource_id"]),
+                item["date"],
+                int(item["_period_id"]),
+                sub_resource_ids,
+            )
             if key in attempted:
                 continue
             attempted.add(key)
             unfinished = client.list_unfinished()
-            if len(unfinished) >= 3:
+            if len(unfinished) + successful_total >= max_unfinished:
                 stop_reason = "capacity_reached"
                 break
             result: BookingSubmission = client.submit_booking(
@@ -180,6 +215,7 @@ def monitor_and_book_once(
             )
             if result.ok:
                 successful_by_job[job_index] = successful_by_job.get(job_index, 0) + 1
+                successful_total += 1
                 made_progress = True
             if stop_reason == "capacity_reached":
                 break

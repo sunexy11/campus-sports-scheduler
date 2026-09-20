@@ -92,6 +92,13 @@ def scheduled_book_once(
     jobs = [job for job in config.get("scheduled_jobs", []) if job.get("enabled")]
     resources = client.list_resources()
     output: list[dict[str, Any]] = []
+    limits = config.get("limits")
+    max_unfinished = (
+        int(limits.get("max_unfinished_reservations", 3))
+        if isinstance(limits, dict)
+        else 3
+    )
+    successful_total = 0
     for job in jobs:
         target_date = today + timedelta(days=int(job.get("date_offset", 2)))
         candidates, details = _scheduled_candidates(client, job, resources, target_date)
@@ -113,7 +120,7 @@ def scheduled_book_once(
             if successful >= max_new:
                 break
             unfinished = client.list_unfinished()
-            if len(unfinished) >= 3:
+            if len(unfinished) + successful_total >= max_unfinished:
                 item["stop_reason"] = "capacity_reached"
                 break
             resource_id, period_id, sub_ids = details[slot]
@@ -140,6 +147,7 @@ def scheduled_book_once(
             )
             if result.ok:
                 successful += 1
+                successful_total += 1
         item.setdefault("stop_reason", "processed")
         output.append(item)
     return {"mode": "scheduled_book_once", "jobs": output}
