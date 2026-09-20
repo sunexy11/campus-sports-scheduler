@@ -4,7 +4,12 @@ from datetime import date, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from .booking_api import BookingReadClient, BookingSubmission, ResourceSummary
+from .booking_api import (
+    BookingReadClient,
+    BookingSubmission,
+    ResourceSummary,
+    normalize_time_range,
+)
 from .notifier import QQSMTPNotifier
 
 
@@ -39,11 +44,11 @@ def _scan_monitor_jobs(
     findings: list[dict[str, Any]] = []
     for job_index, job in enumerate(config.get("monitor", {}).get("jobs", [])):
         resource = _find_resource(resources, str(job["venue"]), str(job["sport"]))
-        wanted_times = {str(item) for item in job.get("times", [])}
+        wanted_times = {normalize_time_range(str(item)) for item in job.get("times", [])}
         for target_date in _target_dates(job.get("dates"), today):
             availability = client.get_availability(resource.resource_id, target_date)
             for period in availability.periods:
-                if period.time not in wanted_times or not period.available:
+                if normalize_time_range(period.time) not in wanted_times or not period.available:
                     continue
                 findings.append(
                     {

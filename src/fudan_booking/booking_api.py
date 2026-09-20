@@ -17,6 +17,22 @@ SPORTS_TOPIC_ID = 48
 SPORTS_PAGE = f"{BOOKING_BASE}/reservation/fe/site/special/special?id={SPORTS_TOPIC_ID}"
 
 
+def normalize_time_range(value: str) -> str:
+    """Normalize ``H:MM-H:MM`` and ``HH:MM-HH:MM`` to the site format."""
+
+    try:
+        start, end = value.strip().split("-", 1)
+        start_hour, start_minute = (int(part) for part in start.split(":", 1))
+        end_hour, end_minute = (int(part) for part in end.split(":", 1))
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise ValueError(f"invalid time range: {value!r}") from exc
+    if not (0 <= start_hour <= 23 and 0 <= end_hour <= 23):
+        raise ValueError(f"invalid time range: {value!r}")
+    if not (0 <= start_minute <= 59 and 0 <= end_minute <= 59):
+        raise ValueError(f"invalid time range: {value!r}")
+    return f"{start_hour:02d}:{start_minute:02d}-{end_hour:02d}:{end_minute:02d}"
+
+
 @dataclass(frozen=True, slots=True)
 class ResourceSummary:
     resource_id: int
@@ -172,6 +188,8 @@ class BookingReadClient:
             )
             if phone
             else "[]",
+            "code": "",
+            "number": number,
             "collective": "0",
             "captcha": json.dumps({"token": "", "pointJson": ""}),
         }
@@ -244,6 +262,11 @@ class BookingReadClient:
             parsed = urlsplit(response.url)
             endpoint = f"{parsed.hostname or 'unknown-host'}{parsed.path}"
             if response.status_code == 412 and parsed.hostname == "booking.fudan.edu.cn":
+                if operation == "booking submission":
+                    raise AntiBotChallenge(
+                        "预约提交 HTTP 412：预约接口额外要求瑞数/预约验证；"
+                        "当前无浏览器验证码令牌，未能完成提交"
+                    ) from exc
                 raise AntiBotChallenge(
                     f"{operation} HTTP 412：booking.fudan.edu.cn 启用了瑞数反爬校验；"
                     "当前纯 requests 客户端无法完成 JavaScript 校验"

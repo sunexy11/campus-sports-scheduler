@@ -76,6 +76,36 @@ def test_monitor_once_does_not_send_when_no_notifier():
     ) == []
 
 
+def test_monitor_matches_non_zero_padded_config_time():
+    class MorningClient(FakeClient):
+        def get_availability(self, resource_id, target_date):
+            return ResourceAvailability(
+                resource_id,
+                target_date,
+                (939,),
+                (PeriodAvailability(3800, "09:00-10:00", 1, 1, (939,)),),
+            )
+
+    findings = monitor_once(
+        MorningClient(),
+        {
+            "monitor": {
+                "jobs": [
+                    {
+                        "venue": "北区体育馆",
+                        "sport": "羽毛球",
+                        "dates": ["2026-09-22"],
+                        "times": ["9:00-10:00"],
+                    }
+                ]
+            }
+        },
+        today=date(2026, 9, 20),
+    )
+
+    assert findings[0]["time"] == "09:00-10:00"
+
+
 class RacingClient(FakeClient):
     def __init__(self):
         self.submit_calls = []

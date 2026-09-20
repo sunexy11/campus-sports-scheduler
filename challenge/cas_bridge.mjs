@@ -90,6 +90,12 @@ async function fetchBookingPost(url, cookieJar, referer, body) {
     headers: {
       Cookie: cookieJar.getCookieStringSync(current.toString()),
       "Content-Type": "application/x-www-form-urlencoded",
+      Accept: "application/json, text/plain, */*",
+      Origin: `https://${BOOKING_HOST}`,
+      "X-Requested-With": "XMLHttpRequest",
+      "Sec-Fetch-Site": "same-origin",
+      "Sec-Fetch-Mode": "cors",
+      "Sec-Fetch-Dest": "empty",
       "User-Agent": USER_AGENT,
       Referer: referer,
     },
@@ -136,6 +142,8 @@ function bookingForm(request) {
     verify: null,
     type: "mobile",
   }]) : "[]");
+  form.set("code", "");
+  form.set("number", String(number));
   form.set("collective", "0");
   form.set("captcha", JSON.stringify({ token: "", pointJson: "" }));
   return form;

@@ -3,7 +3,12 @@ from __future__ import annotations
 from datetime import date, timedelta
 from typing import Any
 
-from .booking_api import BookingReadClient, BookingSubmission, ResourceSummary
+from .booking_api import (
+    BookingReadClient,
+    BookingSubmission,
+    ResourceSummary,
+    normalize_time_range,
+)
 from .models import BlockPreference, SlotKey
 from .monitor import _find_resource
 from .policy import plan_consecutive_first
@@ -21,15 +26,22 @@ def _scheduled_candidates(
         venue = str(preference["venue"])
         sport = str(preference["sport"])
         preferences.extend(
-            BlockPreference(venue, sport, tuple(map(str, block)), priority)
+            BlockPreference(
+                venue,
+                sport,
+                tuple(normalize_time_range(str(item)) for item in block),
+                priority,
+            )
             for block in preference.get("blocks", [])
         )
         resource = _find_resource(resources, venue, sport)
         availability = client.get_availability(resource.resource_id, target_date)
-        by_time = {period.time: period for period in availability.periods}
+        by_time = {
+            normalize_time_range(period.time): period for period in availability.periods
+        }
         for block in preference.get("blocks", []):
             for raw_time in block:
-                time = str(raw_time)
+                time = normalize_time_range(str(raw_time))
                 period = by_time.get(time)
                 if period is None or not period.available:
                     continue

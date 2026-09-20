@@ -136,6 +136,9 @@ fudan-booking monitor-once --config config/config.example.yaml --allow-booking
 每次提交前都会重新检查未结束预约数量。提交期间若空位被抢走，会输出
 `slot_unavailable` 并继续尝试其他候选，不会使任务失败；达到三个未结束预约后只监控、不再提交。
 
+如果提交接口返回 HTTP 412，则表示预约接口另外要求瑞数或预约验证码令牌。程序会停止并明确报告
+这个问题，不会把它误判成“场地已被抢走”。只读查询通过并不代表预约提交一定已经通过同一层校验。
+
 ## Cloudflare
 
 Cloudflare Worker 暂不部署预约系统监控。Worker 运行时不能直接运行当前所需的 Node/JSDOM

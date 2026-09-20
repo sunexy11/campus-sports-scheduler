@@ -4,8 +4,13 @@ import pytest
 import requests
 
 from fudan_booking.auth import UISCredentials
-from fudan_booking.booking_api import BookingReadClient
+from fudan_booking.booking_api import BookingReadClient, normalize_time_range
 from fudan_booking.errors import BookingError
+
+
+def test_normalize_time_range_accepts_single_digit_hours() -> None:
+    assert normalize_time_range("9:00-10:00") == "09:00-10:00"
+    assert normalize_time_range("09:00-10:00") == "09:00-10:00"
 
 
 class FakeResponse:
