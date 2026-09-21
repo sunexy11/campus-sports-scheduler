@@ -84,6 +84,8 @@ class BookingSubmission:
     reason: str
     process_id: int | None = None
     submit_elapsed_ms: int | None = None
+    first_post_elapsed_ms: int | None = None
+    retry_post_elapsed_ms: int | None = None
     challenge_elapsed_ms: int | None = None
     challenge_completed: bool | None = None
 
@@ -312,6 +314,8 @@ class BookingReadClient:
         completed = headers.get("X-Fudan-Challenge-Completed")
         return {
             "submit_elapsed_ms": integer("X-Fudan-Submit-Elapsed-Ms"),
+            "first_post_elapsed_ms": integer("X-Fudan-First-Post-Elapsed-Ms"),
+            "retry_post_elapsed_ms": integer("X-Fudan-Retry-Post-Elapsed-Ms"),
             "challenge_elapsed_ms": integer("X-Fudan-Challenge-Elapsed-Ms"),
             "challenge_completed": (
                 completed.lower() == "true"

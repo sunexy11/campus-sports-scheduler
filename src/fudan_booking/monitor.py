@@ -224,6 +224,16 @@ def monitor_and_book_once(
                         else {}
                     ),
                     **(
+                        {"first_post_elapsed_ms": result.first_post_elapsed_ms}
+                        if result.first_post_elapsed_ms is not None
+                        else {}
+                    ),
+                    **(
+                        {"retry_post_elapsed_ms": result.retry_post_elapsed_ms}
+                        if result.retry_post_elapsed_ms is not None
+                        else {}
+                    ),
+                    **(
                         {"challenge_elapsed_ms": result.challenge_elapsed_ms}
                         if result.challenge_elapsed_ms is not None
                         else {}

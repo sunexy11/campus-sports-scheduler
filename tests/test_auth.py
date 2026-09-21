@@ -152,6 +152,8 @@ def test_bridge_response_copies_booking_timing_metadata() -> None:
     )
 
     assert response.headers["X-Fudan-Submit-Elapsed-Ms"] == "15123"
+    assert response.headers["X-Fudan-First-Post-Elapsed-Ms"] == "12"
+    assert response.headers["X-Fudan-Retry-Post-Elapsed-Ms"] == "8"
     assert response.headers["X-Fudan-Challenge-Elapsed-Ms"] == "15001"
     assert response.headers["X-Fudan-Challenge-Completed"] == "False"
 
