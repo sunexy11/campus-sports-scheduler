@@ -2,10 +2,12 @@
 
 ## 运行职责划分
 
-- GitHub Actions 当前示例每天 06:50 启动任务，环境准备完成后登录，并在 07:00 提交预约。
+- Cron-job.org 每天 06:50 通过 GitHub `workflow_dispatch` 触发定时预约 Workflow；Workflow 准备
+  环境并登录后等待到 07:00，再提交预约。
 - GitHub Actions 中的 Node/JSDOM 桥负责执行预约站点的瑞数校验；Python 和桥在同一个任务内保持预约会话。
 - Cloudflare Workers 暂不承担预约系统请求：当前接口的瑞数校验需要 Node/JSDOM 的运行环境，Workers 不能直接复用这套会话。
-- 监控频率和部署平台需要在只读桥稳定后重新评估；GitHub Actions 每五分钟全天运行会超出私有仓库免费额度。
+- Cron-job.org 在 07:00–23:55 每 5 分钟触发一次 `monitor-once`；公开仓库使用标准 Runner 不消耗
+  私有仓库的分钟额度，但仍需防止监控任务重叠和 GitHub Runner 排队。
 - QQ SMTP 是唯一的通知渠道。
 
 ## 核心安全约束
@@ -87,4 +89,5 @@
 6. 经用户确认后手动运行一次带 `--allow-booking` 的真实预约。
 7. 当前示例已经将目标定时任务设置为 `scheduled_jobs[].enabled: true`；如果只想干跑，先改回
    `false`，或使用手动 Actions 并保持 `allow_booking: false`。
-8. “仅提醒”监控稳定后，再将监控任务设置为 `auto_book_if_capacity` 并在 Actions 手动输入允许预约。
+8. “仅提醒”监控稳定后，再将监控任务设置为 `auto_book_if_capacity`，并在 Cron-job.org 请求体中
+   将 `allow_booking` 改为 `true`。

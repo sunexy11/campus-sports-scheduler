@@ -3,9 +3,9 @@ requires = ["setuptools>=75"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "fudan-booking-bot"
+name = "campus-sports-scheduler"
 version = "0.1.0"
-description = "Fudan sports venue booking and vacancy monitoring"
+description = "Campus sports venue booking and vacancy monitoring"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -23,7 +23,9 @@ dev = [
 ]
 
 [project.scripts]
+# Keep the historical command for local scripts and existing workflows.
 fudan-booking = "fudan_booking.cli:main"
+campus-sports = "fudan_booking.cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

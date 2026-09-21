@@ -26,7 +26,7 @@ scheduled_jobs:
           - ["19:00-20:00", "20:00-21:00"]
 
 monitor:
-  enabled: false
+  enabled: true
   interval_minutes: 5
   active_start: "07:00"
   active_end: "24:00"

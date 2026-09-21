@@ -1,5 +1,5 @@
 {
-  "name": "fudan-booking-monitor-worker",
+  "name": "campus-sports-monitor-worker",
   "private": true,
   "version": "0.1.0",
   "type": "module",

@@ -1,7 +1,8 @@
 # 配置与部署准备
 
 项目默认仍以只读方式运行，但预约提交链路已经实现。只有明确传入
-`--allow-booking` 时才会提交，配置示例中的定时任务和监控任务也默认关闭。
+`--allow-booking` 时才会提交；配置示例保留了实际的定时预约和监控目标，但 GitHub 手动触发与
+Cron-job.org 请求都可以通过 `allow_booking: false` 先做只读演练。
 
 ## 本地安装
 
@@ -80,12 +81,19 @@ FUDAN_TOTP_SECRET       可选，仅在 UIS 明确要求 TOTP 时使用
 公开后必须遵守以下边界：
 
 1. 不提交 `.env`、密码、TOTP 种子、SMTP 授权码、Cookie、CAS ticket 或个人手机号。
-2. 预约和监控工作流只允许在默认分支的 `schedule` 或手动触发运行，不在外部 Pull Request 中使用 Secrets。
+2. 预约和监控工作流只允许在默认分支的 `workflow_dispatch` 触发运行，不在外部 Pull Request 中使用 Secrets。
 3. 固定第三方 Action 版本，并保留 `contents: read` 等最小权限。
 4. 公开仓库中的 Issue、日志和失败输出不得包含账号、邮箱、姓名或预约接口原始响应。
 
-公开仓库解决的是 Actions 免费额度问题，不会解决 GitHub 定时任务可能延迟、站点限流或瑞数
-校验变化的问题；正式启用前仍需先完成不提交演练。
+公开仓库解决的是 Actions 免费额度问题；本项目进一步使用 Cron-job.org 触发 `workflow_dispatch`
+来降低 GitHub 原生定时任务的延迟风险，但仍不能消除 Runner 排队、站点限流或瑞数校验变化。
+正式启用前仍需先完成不提交演练。
+
+## Cron-job.org 自动触发
+
+定时预约和五分钟监控的外部触发配置见 [Cron-job.org 配置指南](CRON_JOB_ORG.md)。该方案需要一个
+只授予目标仓库 `Actions: Read and write` 权限的 GitHub fine-grained Token。Token 只放在
+Cron-job.org 请求 Header 中，不写入仓库和 GitHub Secrets。
 
 ## 后续需要添加的 GitHub Secrets
 

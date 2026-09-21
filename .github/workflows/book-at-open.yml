@@ -1,11 +1,6 @@
 name: Book at opening time
 
-# Planned schedule: 22:50 UTC = 06:50 Asia/Shanghai. The workflow logs in as
-# soon as the environment is ready, then waits until 07:00 before submitting.
 on:
-  schedule:
-    # 22:50 UTC = 06:50 Asia/Shanghai.
-    - cron: "50 22 * * *"
   workflow_dispatch:
     inputs:
       allow_booking:
@@ -13,6 +8,11 @@ on:
         required: true
         default: false
         type: boolean
+      wait_until:
+        description: Wait until this Asia/Shanghai time before querying and submitting
+        required: true
+        default: "07:00"
+        type: string
 
 permissions:
   contents: read
@@ -53,11 +53,10 @@ jobs:
             exit 2
           fi
           args=(scheduled-book-once --config config/config.example.yaml)
-          if [[ "${{ github.event_name }}" == "schedule" ]]; then
-            # The 06:50 runner logs in after setup and waits until 07:00.
-            args+=(--wait-until 07:00)
+          if [[ -n "${{ inputs.wait_until }}" ]]; then
+            args+=(--wait-until "${{ inputs.wait_until }}")
           fi
-          if [[ "${{ github.event_name }}" == "schedule" || "${{ inputs.allow_booking }}" == "true" ]]; then
+          if [[ "${{ inputs.allow_booking }}" == "true" ]]; then
             args+=(--allow-booking)
           fi
           fudan-booking "${args[@]}"

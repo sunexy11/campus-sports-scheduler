@@ -1,5 +1,5 @@
 {
-  "name": "fudan-booking-cas-bridge",
+  "name": "campus-sports-cas-bridge",
   "private": true,
   "version": "0.1.0",
   "description": "本地执行复旦预约站点瑞数校验的隔离辅助进程",

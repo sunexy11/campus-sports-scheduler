@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "fudan-booking-monitor",
+  "name": "campus-sports-monitor",
   "main": "src/index.ts",
   "compatibility_date": "2026-09-20",
   "observability": {
@@ -17,4 +17,3 @@
     "MONITOR_END": "24:00"
   }
 }
-
