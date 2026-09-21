@@ -386,9 +386,27 @@ class BookingReadClient:
             endpoint = f"{parsed.hostname or 'unknown-host'}{parsed.path}"
             if response.status_code == 412 and parsed.hostname == "booking.fudan.edu.cn":
                 if operation == "booking submission":
+                    timing = self._submission_timing(response)
+                    timing_parts = [
+                        f"{key}={timing[key]}"
+                        for key in (
+                            "first_post_elapsed_ms",
+                            "challenge_elapsed_ms",
+                            "challenge_completion_signal",
+                            "retry_post_elapsed_ms",
+                            "retry_challenge_elapsed_ms",
+                            "retry_challenge_completion_signal",
+                            "final_post_elapsed_ms",
+                        )
+                        if timing.get(key) is not None
+                    ]
+                    timing_suffix = (
+                        f"；{', '.join(timing_parts)}" if timing_parts else ""
+                    )
                     raise AntiBotChallenge(
                         "预约提交 HTTP 412：预约接口额外要求瑞数/预约验证；"
                         "当前无浏览器验证码令牌，未能完成提交"
+                        f"{timing_suffix}"
                     ) from exc
                 raise AntiBotChallenge(
                     f"{operation} HTTP 412：booking.fudan.edu.cn 启用了瑞数反爬校验；"

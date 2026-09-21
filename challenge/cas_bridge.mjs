@@ -29,10 +29,15 @@ function challengeTimeout(name, fallback) {
   return Number.isFinite(configured) && configured >= 1000 ? configured : fallback;
 }
 
-// 瑞数通常会在首轮挑战期间写入 cookie。最多等待 3 秒，然后只重试一次 POST。
+// 瑞数通常会在首轮挑战期间写入 cookie。首轮最多等待 3 秒；如果重试 POST
+// 仍返回 412，再给第二轮挑战最多 5 秒。
 const POST_CHALLENGE_TIMEOUT_MS = challengeTimeout(
   "FUDAN_POST_CHALLENGE_TIMEOUT_MS",
   3000,
+);
+const POST_RETRY_CHALLENGE_TIMEOUT_MS = challengeTimeout(
+  "FUDAN_POST_RETRY_CHALLENGE_TIMEOUT_MS",
+  5000,
 );
 
 function assertBookingUrl(value) {
@@ -340,7 +345,9 @@ async function handleBooking(request) {
   );
   const firstPostElapsedMs = Math.round(performance.now() - firstPostStartedAt);
   let challenge = null;
+  let retryChallenge = null;
   let retryPostElapsedMs = null;
+  let finalPostElapsedMs = null;
   if (response.status === 412) {
     challenge = await executePostChallenge(
       response,
@@ -357,6 +364,24 @@ async function handleBooking(request) {
         form,
       );
       retryPostElapsedMs = Math.round(performance.now() - retryPostStartedAt);
+      if (response.status === 412) {
+        retryChallenge = await executePostChallenge(
+          response,
+          state.cookieJar,
+          state.ticketUrl,
+          POST_RETRY_CHALLENGE_TIMEOUT_MS,
+        );
+        if (retryChallenge.attempted) {
+          const finalPostStartedAt = performance.now();
+          response = await fetchBookingPost(
+            `${"https://"}${BOOKING_HOST}${BOOKING_PATH}`,
+            state.cookieJar,
+            state.ticketUrl,
+            form,
+          );
+          finalPostElapsedMs = Math.round(performance.now() - finalPostStartedAt);
+        }
+      }
     }
   }
   const body = await response.text();
@@ -370,13 +395,14 @@ async function handleBooking(request) {
       submit_elapsed_ms: Math.round(performance.now() - startedAt),
       first_post_elapsed_ms: firstPostElapsedMs,
       retry_post_elapsed_ms: retryPostElapsedMs,
-      final_post_elapsed_ms: null,
+      final_post_elapsed_ms: finalPostElapsedMs,
       challenge_elapsed_ms: challenge?.elapsed_ms ?? null,
       challenge_completed: challenge?.completed ?? null,
       challenge_completion_signal: challenge?.completion_signal ?? null,
-      retry_challenge_elapsed_ms: null,
-      retry_challenge_completed: null,
-      retry_challenge_completion_signal: null,
+      retry_challenge_elapsed_ms: retryChallenge?.elapsed_ms ?? null,
+      retry_challenge_completed: retryChallenge?.completed ?? null,
+      retry_challenge_completion_signal:
+        retryChallenge?.completion_signal ?? null,
     },
   };
 }

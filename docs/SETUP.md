@@ -177,13 +177,16 @@ fudan-booking monitor-once --config config/config.example.yaml --allow-booking
 `overlap_with_existing`，跳过当前候选并继续尝试其他候选，不会因此终止本轮监控或定时抢场。
 
 如果提交接口返回 HTTP 412，Node/JSDOM 桥会执行同域瑞数挑战 HTML；现在既监听页面的完成事件，
-也检测 Cookie 是否已经更新，任一信号出现就会提前重试，不再盲等完整超时时间。每次提交最多只执行
-这一轮挑战（默认最多 3 秒）并重试一次；重试仍返回 412 时直接报告瑞数校验失败，不再进行第二轮挑战。
-等待时间可以通过 `FUDAN_POST_CHALLENGE_TIMEOUT_MS` 覆盖，默认值是 `3000` 毫秒。
+也检测 Cookie 是否已经更新，任一信号出现就会提前重试，不再盲等完整超时时间。第一次挑战默认最多
+等待 3 秒并重试一次；如果仍返回 412，会再执行第二轮挑战，默认最多等待 5 秒并进行最后一次提交。
+等待时间可以分别通过 `FUDAN_POST_CHALLENGE_TIMEOUT_MS`（首轮）和
+`FUDAN_POST_RETRY_CHALLENGE_TIMEOUT_MS`（第二轮）覆盖，默认值分别是 `3000` 和 `5000` 毫秒。
 
 定时预约在等待 `wait_until` 之前会先读取场馆列表、预热目标日期日历并准备手机号；等待结束后仍会
 刷新一次日历，因为开放时刻的空位状态可能与预热结果不同。预约结果中的
-`challenge_completion_signal` 会标记挑战是由页面事件、Cookie 更新还是超时结束。
+`challenge_completion_signal` 和 `retry_challenge_completion_signal` 会标记两轮挑战分别是由页面事件、
+Cookie 更新还是超时结束。若最终仍为 HTTP 412，错误信息也会带上两轮挑战的耗时和完成信号，便于查看
+GitHub Actions 上 Cookie 实际更新用了多久。
 
 预约或监控开始前，程序会从网站读取当前未结束预约数，并用“3 减去已有数量”和任务的
 `max_new_reservations` 取较小值作为本次最多新增数量。已有预约达到 3 个，或某个任务的

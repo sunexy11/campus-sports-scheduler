@@ -5,7 +5,7 @@ import requests
 
 from fudan_booking.auth import UISCredentials
 from fudan_booking.booking_api import BookingReadClient, normalize_time_range
-from fudan_booking.errors import BookingError
+from fudan_booking.errors import AntiBotChallenge, BookingError
 
 
 def test_normalize_time_range_accepts_single_digit_hours() -> None:
@@ -203,6 +203,35 @@ def test_api_http_error_does_not_expose_query_values() -> None:
 
     assert "resource list HTTP 403" in str(error.value)
     assert "ticket=secret" not in str(error.value)
+
+
+def test_booking_412_reports_challenge_timing_without_cookie_values() -> None:
+    response = requests.Response()
+    response.status_code = 412
+    response.url = "https://booking.fudan.edu.cn/reservation/site/resource/launch"
+    response.headers.update(
+        {
+            "X-Fudan-First-Post-Elapsed-Ms": "312",
+            "X-Fudan-Challenge-Elapsed-Ms": "3001",
+            "X-Fudan-Challenge-Completion-Signal": "timeout",
+            "X-Fudan-Retry-Post-Elapsed-Ms": "318",
+            "X-Fudan-Retry-Challenge-Elapsed-Ms": "5002",
+            "X-Fudan-Retry-Challenge-Completion-Signal": "cookie",
+            "X-Fudan-Final-Post-Elapsed-Ms": "4910",
+        }
+    )
+    client = BookingReadClient(FakeSession([]))
+
+    with pytest.raises(AntiBotChallenge) as error:
+        client._json(response, "booking submission")
+
+    message = str(error.value)
+    assert "first_post_elapsed_ms=312" in message
+    assert "challenge_elapsed_ms=3001" in message
+    assert "challenge_completion_signal=timeout" in message
+    assert "retry_challenge_elapsed_ms=5002" in message
+    assert "retry_challenge_completion_signal=cookie" in message
+    assert "final_post_elapsed_ms=4910" in message
 
 
 def test_login_preflights_booking_page_before_cas(monkeypatch) -> None:
