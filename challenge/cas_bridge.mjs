@@ -24,6 +24,14 @@ const READ_ONLY_PATHS = new Set([
   "/reservation/site/appointment/appointment-list",
 ]);
 const BOOKING_PATH = "/reservation/site/resource/launch";
+const configuredChallengeTimeout = Number.parseInt(
+  process.env.FUDAN_POST_CHALLENGE_TIMEOUT_MS || "15000",
+  10,
+);
+const POST_CHALLENGE_TIMEOUT_MS = Number.isFinite(configuredChallengeTimeout)
+  && configuredChallengeTimeout >= 1000
+  ? configuredChallengeTimeout
+  : 15000;
 
 function assertBookingUrl(value) {
   const parsed = new URL(value);
@@ -172,7 +180,9 @@ async function executePostChallenge(response, cookieJar, referer) {
   });
   const completed = await Promise.race([
     exited.then(() => true),
-    new Promise((resolve) => setTimeout(() => resolve(false), 15000)),
+    new Promise((resolve) =>
+      setTimeout(() => resolve(false), POST_CHALLENGE_TIMEOUT_MS),
+    ),
   ]);
   dom.window.close();
   return {
