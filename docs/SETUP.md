@@ -178,9 +178,10 @@ fudan-booking monitor-once --config config/config.example.yaml --allow-booking
 
 如果提交接口返回 HTTP 412，Node/JSDOM 桥会执行同域瑞数挑战 HTML；现在既监听页面的完成事件，
 也检测 Cookie 是否已经更新，任一信号出现就会提前重试，不再盲等完整超时时间。第一次挑战默认最多
-等待 3 秒并重试一次；如果仍返回 412，会再执行第二轮挑战，默认最多等待 5 秒并进行最后一次提交。
+等待 8 秒并重试一次；如果仍返回 412，会再执行第二轮挑战，默认最多等待 8 秒并进行最后一次提交。
 等待时间可以分别通过 `FUDAN_POST_CHALLENGE_TIMEOUT_MS`（首轮）和
-`FUDAN_POST_RETRY_CHALLENGE_TIMEOUT_MS`（第二轮）覆盖，默认值均为 `8000` 毫秒。
+`FUDAN_POST_RETRY_CHALLENGE_TIMEOUT_MS`（第二轮）覆盖，默认值均为 `8000` 毫秒；如果 Cookie
+提前更新，实际等待时间会短于 8 秒。
 
 定时预约在等待 `wait_until` 之前会先读取场馆列表、预热目标日期日历并准备手机号；等待结束后仍会
 刷新一次日历，因为开放时刻的空位状态可能与预热结果不同。预约结果中的
