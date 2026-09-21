@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from datetime import date, datetime
 from urllib.parse import urlsplit
@@ -89,8 +90,10 @@ class BookingSubmission:
     final_post_elapsed_ms: int | None = None
     challenge_elapsed_ms: int | None = None
     challenge_completed: bool | None = None
+    challenge_completion_signal: str | None = None
     retry_challenge_elapsed_ms: int | None = None
     retry_challenge_completed: bool | None = None
+    retry_challenge_completion_signal: str | None = None
 
 
 def _booking_rejection_reason(message: str) -> str | None:
@@ -154,6 +157,9 @@ class BookingReadClient:
         self.session = session
         self.session.headers["Referer"] = SPORTS_PAGE
         self._cached_mobile: str | None = None
+        # The authenticated profile is the fallback.  An explicitly supplied
+        # secret avoids an extra profile GET after the opening-time wait.
+        self._configured_mobile = os.getenv("FUDAN_MOBILE", "").strip()
 
     def _get(self, url: str, **kwargs) -> requests.Response:
         """Use the persistent no-browser bridge when CAS created one."""
@@ -193,7 +199,10 @@ class BookingReadClient:
 
         bridge = getattr(self.session, "_fudan_cas_bridge", None)
         effective_phone = phone
-        if not effective_phone and bridge is not None:
+        if not effective_phone and self._configured_mobile:
+            effective_phone = self._configured_mobile
+            self._cached_mobile = effective_phone
+        elif not effective_phone and bridge is not None:
             # 网页预约表单会自动填入账号手机号；部分资源将该字段标记为必填。
             # 只在真实桥接提交前读取，不把手机号写入配置或日志。
             effective_phone = self.default_mobile()
@@ -297,11 +306,24 @@ class BookingReadClient:
 
         if self._cached_mobile is not None:
             return self._cached_mobile
+        if self._configured_mobile:
+            self._cached_mobile = self._configured_mobile
+            return self._cached_mobile
         response = self._get(DETAIL_MOBILE_ENDPOINT, timeout=20)
         data = self._json(response, "account contact")
         mobile = data.get("mobile")
         self._cached_mobile = str(mobile) if mobile else ""
         return self._cached_mobile
+
+    def prepare_contact(self) -> str:
+        """Warm the contact value before the opening-time wait when possible."""
+
+        bridge = getattr(self.session, "_fudan_cas_bridge", None)
+        if self._configured_mobile:
+            return self.default_mobile()
+        if bridge is not None:
+            return self.default_mobile()
+        return ""
 
     @staticmethod
     def _submission_timing(response: requests.Response) -> dict[str, object]:
@@ -326,6 +348,9 @@ class BookingReadClient:
                 if isinstance(completed, str)
                 else None
             ),
+            "challenge_completion_signal": headers.get(
+                "X-Fudan-Challenge-Completion-Signal"
+            ),
             "retry_challenge_elapsed_ms": integer(
                 "X-Fudan-Retry-Challenge-Elapsed-Ms"
             ),
@@ -334,6 +359,9 @@ class BookingReadClient:
                 == "true"
                 if headers.get("X-Fudan-Retry-Challenge-Completed") is not None
                 else None
+            ),
+            "retry_challenge_completion_signal": headers.get(
+                "X-Fudan-Retry-Challenge-Completion-Signal"
             ),
         }
 

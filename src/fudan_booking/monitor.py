@@ -350,6 +350,13 @@ def monitor_and_book_once(
                     ),
                     **(
                         {
+                            "challenge_completion_signal": result.challenge_completion_signal
+                        }
+                        if result.challenge_completion_signal is not None
+                        else {}
+                    ),
+                    **(
+                        {
                             "retry_challenge_elapsed_ms": result.retry_challenge_elapsed_ms
                         }
                         if result.retry_challenge_elapsed_ms is not None
@@ -360,6 +367,13 @@ def monitor_and_book_once(
                             "retry_challenge_completed": result.retry_challenge_completed
                         }
                         if result.retry_challenge_completed is not None
+                        else {}
+                    ),
+                    **(
+                        {
+                            "retry_challenge_completion_signal": result.retry_challenge_completion_signal
+                        }
+                        if result.retry_challenge_completion_signal is not None
                         else {}
                     ),
                 }

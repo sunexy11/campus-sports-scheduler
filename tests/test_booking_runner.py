@@ -6,18 +6,20 @@ from fudan_booking.booking_api import (
     ResourceAvailability,
     ResourceSummary,
 )
-from fudan_booking.booking_runner import scheduled_book_once
+from fudan_booking.booking_runner import prewarm_scheduled_context, scheduled_book_once
 
 
 class FakeScheduledClient:
     def __init__(self, result: BookingSubmission | None = None):
         self.result = result or BookingSubmission(False, "slot_unavailable")
         self.calls = []
+        self.availability_calls = []
 
     def list_resources(self):
         return [ResourceSummary(938, "北区体育馆-羽毛球", 6)]
 
     def get_availability(self, resource_id, target_date):
+        self.availability_calls.append((resource_id, target_date))
         return ResourceAvailability(
             resource_id,
             target_date,
@@ -66,6 +68,7 @@ def test_scheduled_book_defaults_to_dry_run():
     assert result["jobs"][0]["mode"] == "dry_run"
     assert result["jobs"][0]["planned"] == ["19:00-20:00", "20:00-21:00"]
     assert client.calls == []
+    assert client.availability_calls == [(938, date(2026, 9, 22))]
 
 
 def test_scheduled_booking_continues_after_racing_rejection():
@@ -108,3 +111,17 @@ def test_scheduled_booking_skips_site_queries_when_job_budget_is_zero():
     )
 
     assert result["jobs"][0]["stop_reason"] == "max_new_reservations_zero"
+
+
+def test_scheduled_context_prewarm_deduplicates_resource_and_date():
+    client = FakeScheduledClient()
+    prewarm_scheduled_context(
+        client,
+        _config(),
+        today=date(2026, 9, 20),
+        resources=client.list_resources(),
+    )
+
+    # One configured venue/date is warmed once even though the preference has
+    # multiple blocks; the actual booking pass still refreshes the calendar.
+    assert client.calls == []

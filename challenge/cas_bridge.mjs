@@ -29,15 +29,10 @@ function challengeTimeout(name, fallback) {
   return Number.isFinite(configured) && configured >= 1000 ? configured : fallback;
 }
 
-// 瑞数通常会在首轮挑战期间写入 cookie。首轮等待最多 3 秒；
-// 如果紧接着的第二次 POST 仍收到 412，再给第二轮挑战最多 5 秒。
+// 瑞数通常会在首轮挑战期间写入 cookie。最多等待 3 秒，然后只重试一次 POST。
 const POST_CHALLENGE_TIMEOUT_MS = challengeTimeout(
   "FUDAN_POST_CHALLENGE_TIMEOUT_MS",
   3000,
-);
-const POST_RETRY_CHALLENGE_TIMEOUT_MS = challengeTimeout(
-  "FUDAN_POST_RETRY_CHALLENGE_TIMEOUT_MS",
-  5000,
 );
 
 function assertBookingUrl(value) {
@@ -132,9 +127,18 @@ async function fetchBookingPost(url, cookieJar, referer, body) {
 async function executePostChallenge(response, cookieJar, referer, timeoutMs) {
   const contentType = response.headers.get("content-type") || "";
   if (response.status !== 412 || !contentType.includes("text/html")) {
-    return { attempted: false, completed: false, elapsed_ms: null };
+    return {
+      attempted: false,
+      completed: false,
+      completion_signal: null,
+      elapsed_ms: null,
+    };
   }
   const startedAt = performance.now();
+  // Some 瑞数 pages write the useful cookie but never emit the synthetic
+  // sdenv:exit event that the page normally uses for navigation.  Snapshot
+  // the jar and accept a cookie change as an early completion signal too.
+  const initialCookie = cookieJar.getCookieStringSync(response.url);
   const html = await response.text();
   if (html.length > 4 * 1024 * 1024) {
     throw new Error("anti-bot challenge is too large");
@@ -142,6 +146,10 @@ async function executePostChallenge(response, cookieJar, referer, timeoutMs) {
   let exitResolve;
   const exited = new Promise((resolve) => {
     exitResolve = resolve;
+  });
+  let cookieResolve;
+  const cookieChanged = new Promise((resolve) => {
+    cookieResolve = resolve;
   });
   class SameHostResourceLoader extends jsdom.ResourceLoader {
     fetch(url, options = {}) {
@@ -185,16 +193,25 @@ async function executePostChallenge(response, cookieJar, referer, timeoutMs) {
       error: () => {},
     },
   });
-  const completed = await Promise.race([
-    exited.then(() => true),
+  const cookiePoll = setInterval(() => {
+    const currentCookie = cookieJar.getCookieStringSync(response.url);
+    if (currentCookie !== initialCookie) {
+      cookieResolve(true);
+    }
+  }, 50);
+  const completion = await Promise.race([
+    exited.then(() => ({ completed: true, signal: "event" })),
+    cookieChanged.then(() => ({ completed: true, signal: "cookie" })),
     new Promise((resolve) =>
-      setTimeout(() => resolve(false), timeoutMs),
+      setTimeout(() => resolve({ completed: false, signal: "timeout" }), timeoutMs),
     ),
   ]);
+  clearInterval(cookiePoll);
   dom.window.close();
   return {
     attempted: true,
-    completed,
+    completed: completion.completed,
+    completion_signal: completion.signal,
     elapsed_ms: Math.round(performance.now() - startedAt),
   };
 }
@@ -323,9 +340,7 @@ async function handleBooking(request) {
   );
   const firstPostElapsedMs = Math.round(performance.now() - firstPostStartedAt);
   let challenge = null;
-  let retryChallenge = null;
   let retryPostElapsedMs = null;
-  let finalPostElapsedMs = null;
   if (response.status === 412) {
     challenge = await executePostChallenge(
       response,
@@ -342,24 +357,6 @@ async function handleBooking(request) {
         form,
       );
       retryPostElapsedMs = Math.round(performance.now() - retryPostStartedAt);
-      if (response.status === 412) {
-        retryChallenge = await executePostChallenge(
-          response,
-          state.cookieJar,
-          state.ticketUrl,
-          POST_RETRY_CHALLENGE_TIMEOUT_MS,
-        );
-        if (retryChallenge.attempted) {
-          const finalPostStartedAt = performance.now();
-          response = await fetchBookingPost(
-            `${"https://"}${BOOKING_HOST}${BOOKING_PATH}`,
-            state.cookieJar,
-            state.ticketUrl,
-            form,
-          );
-          finalPostElapsedMs = Math.round(performance.now() - finalPostStartedAt);
-        }
-      }
     }
   }
   const body = await response.text();
@@ -373,11 +370,13 @@ async function handleBooking(request) {
       submit_elapsed_ms: Math.round(performance.now() - startedAt),
       first_post_elapsed_ms: firstPostElapsedMs,
       retry_post_elapsed_ms: retryPostElapsedMs,
-      final_post_elapsed_ms: finalPostElapsedMs,
+      final_post_elapsed_ms: null,
       challenge_elapsed_ms: challenge?.elapsed_ms ?? null,
       challenge_completed: challenge?.completed ?? null,
-      retry_challenge_elapsed_ms: retryChallenge?.elapsed_ms ?? null,
-      retry_challenge_completed: retryChallenge?.completed ?? null,
+      challenge_completion_signal: challenge?.completion_signal ?? null,
+      retry_challenge_elapsed_ms: null,
+      retry_challenge_completed: null,
+      retry_challenge_completion_signal: null,
     },
   };
 }

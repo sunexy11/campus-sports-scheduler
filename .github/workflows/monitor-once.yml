@@ -24,6 +24,7 @@ jobs:
       FUDAN_USERNAME: ${{ secrets.FUDAN_USERNAME }}
       FUDAN_PASSWORD: ${{ secrets.FUDAN_PASSWORD }}
       FUDAN_TOTP_SECRET: ${{ secrets.FUDAN_TOTP_SECRET }}
+      FUDAN_MOBILE: ${{ secrets.FUDAN_MOBILE }}
       FUDAN_NODE_BIN: node
       QQ_SMTP_USERNAME: ${{ secrets.QQ_SMTP_USERNAME }}
       QQ_SMTP_AUTH_CODE: ${{ secrets.QQ_SMTP_AUTH_CODE }}

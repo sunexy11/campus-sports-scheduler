@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 
 from .auth import UISCredentials
 from .booking_api import BookingReadClient
-from .booking_runner import scheduled_book_once
+from .booking_runner import prewarm_scheduled_context, scheduled_book_once
 from .config import load_config
 from .errors import BookingError, ConfigurationError
 from .monitor import monitor_and_book_once
@@ -170,6 +170,26 @@ def _run_monitor_once(args: argparse.Namespace) -> int:
 def _run_scheduled_book_once(args: argparse.Namespace) -> int:
     config = load_config(args.config)
     client = BookingReadClient.login(_credentials(False))
+    run_today = args.today or datetime.now(ZoneInfo("Asia/Shanghai")).date()
+    # Do the stable, opening-time-independent work before the optional wait.
+    # Availability is intentionally refreshed after the wait because the site
+    # may only expose the newly opened date/periods at the opening moment.
+    enabled_jobs = [
+        job
+        for job in config.raw.get("scheduled_jobs", [])
+        if job.get("enabled")
+        and max(0, int(job.get("max_new_reservations", 1))) > 0
+    ]
+    prepared_resources = client.list_resources() if enabled_jobs else None
+    if args.allow_booking and enabled_jobs:
+        client.prepare_contact()
+    if prepared_resources is not None:
+        prewarm_scheduled_context(
+            client,
+            config.raw,
+            today=run_today,
+            resources=prepared_resources,
+        )
     if args.wait_until:
         hour_text, minute_text = args.wait_until.split(":", 1)
         target_minutes = int(hour_text) * 60 + int(minute_text)
@@ -180,8 +200,9 @@ def _run_scheduled_book_once(args: argparse.Namespace) -> int:
     result = scheduled_book_once(
         client,
         config.raw,
-        today=args.today or datetime.now(ZoneInfo("Asia/Shanghai")).date(),
+        today=run_today,
         allow_booking=bool(args.allow_booking),
+        prepared_resources=prepared_resources,
     )
     if not args.no_email:
         notifier = QQSMTPNotifier(QQSMTPSettings.from_env())

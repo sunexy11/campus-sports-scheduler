@@ -64,9 +64,11 @@ fudan-booking probe
 FUDAN_USERNAME
 FUDAN_PASSWORD
 FUDAN_TOTP_SECRET       可选，仅在 UIS 明确要求 TOTP 时使用
+FUDAN_MOBILE            可选；推荐填写，避免预约开始后再读取个人资料
 ```
 
-请不要在聊天中发送密码或 TOTP 种子。
+请不要在聊天中发送密码、手机号或 TOTP 种子。`FUDAN_MOBILE` 如果不设置，程序会继续从已登录的
+个人资料中读取手机号作为备用方案。
 
 建立并添加 GitHub Secrets 后，可以在 Actions 页面手动运行只读探测、定时策略演练和监控。
 预约工作流的 `allow_booking` 输入默认是关闭的；第一次真实预约前，应先运行不带该开关的
@@ -123,6 +125,7 @@ Cron-job.org 请求 Header 中，不写入仓库和 GitHub Secrets。
 FUDAN_USERNAME
 FUDAN_PASSWORD
 FUDAN_TOTP_SECRET       可选
+FUDAN_MOBILE            可选；预约表单使用的手机号
 QQ_SMTP_USERNAME
 QQ_SMTP_AUTH_CODE
 NOTIFICATION_EMAIL
@@ -173,11 +176,14 @@ fudan-booking monitor-once --config config/config.example.yaml --allow-booking
 如果你已经预约过某个时间段，提交接口可能返回“预约时间不可重叠”。程序会把它记录为
 `overlap_with_existing`，跳过当前候选并继续尝试其他候选，不会因此终止本轮监控或定时抢场。
 
-如果提交接口返回 HTTP 412，Node/JSDOM 桥会先对同域瑞数挑战 HTML 等待最多 3 秒并重试原请求。
-如果第二次提交仍返回 412，桥会再执行一轮挑战，最多等待 5 秒后进行最后一次提交；只有仍然
-失败时，程序才会明确报告这个问题，不会把它误判成“场地已被抢走”。这两个等待时间可以分别通过
-`FUDAN_POST_CHALLENGE_TIMEOUT_MS` 和 `FUDAN_POST_RETRY_CHALLENGE_TIMEOUT_MS` 覆盖，默认值是
-`3000` 和 `5000` 毫秒。
+如果提交接口返回 HTTP 412，Node/JSDOM 桥会执行同域瑞数挑战 HTML；现在既监听页面的完成事件，
+也检测 Cookie 是否已经更新，任一信号出现就会提前重试，不再盲等完整超时时间。每次提交最多只执行
+这一轮挑战（默认最多 3 秒）并重试一次；重试仍返回 412 时直接报告瑞数校验失败，不再进行第二轮挑战。
+等待时间可以通过 `FUDAN_POST_CHALLENGE_TIMEOUT_MS` 覆盖，默认值是 `3000` 毫秒。
+
+定时预约在等待 `wait_until` 之前会先读取场馆列表、预热目标日期日历并准备手机号；等待结束后仍会
+刷新一次日历，因为开放时刻的空位状态可能与预热结果不同。预约结果中的
+`challenge_completion_signal` 会标记挑战是由页面事件、Cookie 更新还是超时结束。
 
 预约或监控开始前，程序会从网站读取当前未结束预约数，并用“3 减去已有数量”和任务的
 `max_new_reservations` 取较小值作为本次最多新增数量。已有预约达到 3 个，或某个任务的

@@ -47,7 +47,8 @@ fudan-booking scheduled-book-once --config config/config.example.yaml
 确认输出无误后，才在手动 Actions 或本地命令中增加 `--allow-booking`。监控任务同理；
 空位在提交前被别人抢走时会记录为 `slot_unavailable`，继续尝试其他候选，不会中断后续监控。
 
-真实凭据只能放在 GitHub Secrets、Cloudflare Secrets 或未提交的本地 `.env` 中。预约时默认使用系统账号侧已保存的联系方式；不要把密码、SMTP 授权码、Cookie 或 TOTP 种子写进配置文件。
+真实凭据只能放在 GitHub Secrets、Cloudflare Secrets 或未提交的本地 `.env` 中。预约手机号可以通过可选的
+`FUDAN_MOBILE` Secret 提供；不设置时会从账号资料读取。不要把密码、手机号、SMTP 授权码、Cookie 或 TOTP 种子写进配置文件。
 
 ## 公开仓库安全边界
 

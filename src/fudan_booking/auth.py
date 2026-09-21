@@ -190,8 +190,16 @@ class _CasBridge:
                 ("final_post_elapsed_ms", "X-Fudan-Final-Post-Elapsed-Ms"),
                 ("challenge_elapsed_ms", "X-Fudan-Challenge-Elapsed-Ms"),
                 ("challenge_completed", "X-Fudan-Challenge-Completed"),
+                (
+                    "challenge_completion_signal",
+                    "X-Fudan-Challenge-Completion-Signal",
+                ),
                 ("retry_challenge_elapsed_ms", "X-Fudan-Retry-Challenge-Elapsed-Ms"),
                 ("retry_challenge_completed", "X-Fudan-Retry-Challenge-Completed"),
+                (
+                    "retry_challenge_completion_signal",
+                    "X-Fudan-Retry-Challenge-Completion-Signal",
+                ),
             ):
                 value = timing.get(key)
                 if value is not None:

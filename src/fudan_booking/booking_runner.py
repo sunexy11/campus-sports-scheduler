@@ -14,6 +14,38 @@ from .monitor import _find_resource
 from .policy import plan_consecutive_first
 
 
+def prewarm_scheduled_context(
+    client: BookingReadClient,
+    config: dict[str, Any],
+    *,
+    today: date,
+    resources: list[ResourceSummary],
+) -> None:
+    """Warm target calendar requests before the opening-time wait.
+
+    Calendar data is deliberately not reused for booking: periods can open or
+    disappear at 07:00.  The final strategy pass refreshes it after the wait;
+    this pass only warms the persistent bridge, DNS/TLS connection and parser.
+    """
+
+    warmed: set[tuple[int, date]] = set()
+    for job in config.get("scheduled_jobs", []):
+        if not job.get("enabled") or max(0, int(job.get("max_new_reservations", 1))) == 0:
+            continue
+        target_date = today + timedelta(days=int(job.get("date_offset", 2)))
+        for preference in job.get("preferences", []):
+            resource = _find_resource(
+                resources,
+                str(preference["venue"]),
+                str(preference["sport"]),
+            )
+            key = (resource.resource_id, target_date)
+            if key in warmed:
+                continue
+            client.get_availability(resource.resource_id, target_date)
+            warmed.add(key)
+
+
 def _scheduled_candidates(
     client: BookingReadClient,
     job: dict[str, Any],
@@ -87,6 +119,7 @@ def scheduled_book_once(
     *,
     today: date,
     allow_booking: bool,
+    prepared_resources: list[ResourceSummary] | None = None,
 ) -> dict[str, Any]:
     """Run the configured opening-time strategy once.
 
@@ -112,7 +145,7 @@ def scheduled_book_once(
     )
     initial_unfinished = len(client.list_unfinished()) if needs_capacity_check else 0
     remaining_capacity = max(0, max_unfinished - initial_unfinished)
-    resources: list[ResourceSummary] | None = None
+    resources: list[ResourceSummary] | None = prepared_resources
     for job in jobs:
         target_date = today + timedelta(days=int(job.get("date_offset", 2)))
         configured_max_new = max(0, int(job.get("max_new_reservations", 1)))
@@ -213,6 +246,13 @@ def scheduled_book_once(
                     ),
                     **(
                         {
+                            "challenge_completion_signal": result.challenge_completion_signal
+                        }
+                        if result.challenge_completion_signal is not None
+                        else {}
+                    ),
+                    **(
+                        {
                             "retry_challenge_elapsed_ms": result.retry_challenge_elapsed_ms
                         }
                         if result.retry_challenge_elapsed_ms is not None
@@ -223,6 +263,13 @@ def scheduled_book_once(
                             "retry_challenge_completed": result.retry_challenge_completed
                         }
                         if result.retry_challenge_completed is not None
+                        else {}
+                    ),
+                    **(
+                        {
+                            "retry_challenge_completion_signal": result.retry_challenge_completion_signal
+                        }
+                        if result.retry_challenge_completion_signal is not None
                         else {}
                     ),
                 }

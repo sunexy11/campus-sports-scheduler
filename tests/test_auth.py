@@ -146,6 +146,7 @@ def test_bridge_response_copies_booking_timing_metadata() -> None:
                 "retry_post_elapsed_ms": 8,
                 "challenge_elapsed_ms": 15001,
                 "challenge_completed": False,
+                "challenge_completion_signal": "timeout",
             },
         },
         "https://booking.fudan.edu.cn/reservation/site/resource/launch",
@@ -156,6 +157,7 @@ def test_bridge_response_copies_booking_timing_metadata() -> None:
     assert response.headers["X-Fudan-Retry-Post-Elapsed-Ms"] == "8"
     assert response.headers["X-Fudan-Challenge-Elapsed-Ms"] == "15001"
     assert response.headers["X-Fudan-Challenge-Completed"] == "False"
+    assert response.headers["X-Fudan-Challenge-Completion-Signal"] == "timeout"
 
 
 def test_booking_412_can_use_local_cas_bridge(monkeypatch, tmp_path) -> None:

@@ -356,3 +356,21 @@ def test_authenticated_default_contact_is_cached_for_multiple_submissions() -> N
 
     assert len(bridge.calls) == 2
     assert len(bridge.get_calls) == 1
+
+
+def test_configured_mobile_avoids_profile_request(monkeypatch) -> None:
+    monkeypatch.setenv("FUDAN_MOBILE", "13912345678")
+    session = FakeSession([])
+    bridge = FakeBookingBridge({"e": "OK", "d": {}})
+    session._fudan_cas_bridge = bridge
+
+    result = BookingReadClient(session).submit_booking(
+        group_id=938,
+        sub_resource_ids=(939,),
+        period_id=3800,
+        target_date=date(2026, 9, 22),
+    )
+
+    assert result.ok is True
+    assert bridge.calls[0]["phone"] == "13912345678"
+    assert bridge.get_calls == []
