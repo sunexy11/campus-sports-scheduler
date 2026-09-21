@@ -11,7 +11,7 @@ on:
       wait_until:
         description: Temporary test value; wait until this Asia/Shanghai time before submitting
         required: true
-        default: "14:00"
+        default: "14:05"
         type: string
 
 permissions:
