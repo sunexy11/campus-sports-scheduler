@@ -29,15 +29,15 @@ function challengeTimeout(name, fallback) {
   return Number.isFinite(configured) && configured >= 1000 ? configured : fallback;
 }
 
-// 瑞数通常会在首轮挑战期间写入 cookie。首轮最多等待 3 秒；如果重试 POST
-// 仍返回 412，再给第二轮挑战最多 5 秒。
+// 瑞数通常会在首轮挑战期间写入 cookie。首轮最多等待 8 秒；如果重试 POST
+// 仍返回 412，再给第二轮挑战最多 8 秒。
 const POST_CHALLENGE_TIMEOUT_MS = challengeTimeout(
   "FUDAN_POST_CHALLENGE_TIMEOUT_MS",
-  3000,
+  8000,
 );
 const POST_RETRY_CHALLENGE_TIMEOUT_MS = challengeTimeout(
   "FUDAN_POST_RETRY_CHALLENGE_TIMEOUT_MS",
-  5000,
+  8000,
 );
 
 function assertBookingUrl(value) {
