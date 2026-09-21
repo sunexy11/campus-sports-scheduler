@@ -102,7 +102,7 @@ https://api.github.com/repos/sunexy11/campus-sports-scheduler/actions/workflows/
 如果只想收邮件、不允许自动预约，把 `allow_booking` 改成 `false`。
 
 每次 Actions 只查询一次，结束后退出；下一次由 Cron-job.org 在 5 分钟后再次触发。达到三个
-未结束预约后，程序会继续监控和发提醒，但不会继续预约。
+未结束预约后，程序会直接跳过本次监控和预约，不会继续请求场地，也不会取消已有预约。
 
 ## 第一次上线顺序
 

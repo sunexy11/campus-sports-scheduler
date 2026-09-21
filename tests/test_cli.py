@@ -50,6 +50,7 @@ def test_probe_prints_only_safe_read_only_summary(monkeypatch, capsys) -> None:
     assert result == 0
     assert payload["mode"] == "read_only"
     assert payload["unfinished_reservation_count"] == 1
+    assert payload["remaining_reservation_capacity"] == 2
     assert payload["resources"][0]["name"] == "北区体育馆-羽毛球"
     assert payload["schedule"]["periods"][0]["available"] is True
     output = json.dumps(payload, ensure_ascii=False)

@@ -83,6 +83,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--wait-until",
         help="wait until HH:MM Asia/Shanghai after login before querying/submitting",
     )
+    scheduled.add_argument("--no-email", action="store_true", help="do not send QQ email")
     return parser
 
 
@@ -107,6 +108,7 @@ def _run_probe(args: argparse.Namespace) -> int:
 
     client = BookingReadClient.login(_credentials(args.prompt_credentials))
     resources = client.list_resources()
+    unfinished_count = len(client.list_unfinished())
     result: dict[str, object] = {
         "ok": True,
         "mode": "read_only",
@@ -118,7 +120,8 @@ def _run_probe(args: argparse.Namespace) -> int:
             }
             for resource in resources
         ],
-        "unfinished_reservation_count": len(client.list_unfinished()),
+        "unfinished_reservation_count": unfinished_count,
+        "remaining_reservation_capacity": max(0, 3 - unfinished_count),
     }
     if args.resource_id is not None:
         availability = client.get_availability(args.resource_id, args.date)
@@ -145,7 +148,7 @@ def _run_monitor_once(args: argparse.Namespace) -> int:
     config = load_config(args.config)
     client = BookingReadClient.login(_credentials(False))
     notifier = None
-    if not args.no_email:
+    if not getattr(args, "no_email", False):
         notifier = QQSMTPNotifier(QQSMTPSettings.from_env())
     result = monitor_and_book_once(
         client,
@@ -180,6 +183,25 @@ def _run_scheduled_book_once(args: argparse.Namespace) -> int:
         today=args.today or datetime.now(ZoneInfo("Asia/Shanghai")).date(),
         allow_booking=bool(args.allow_booking),
     )
+    if not args.no_email:
+        notifier = QQSMTPNotifier(QQSMTPSettings.from_env())
+        successful = [
+            (job, item)
+            for job in result["jobs"]
+            for item in job["results"]
+            if item["ok"]
+        ]
+        lines = ["复旦场馆定时预约结果："]
+        if successful:
+            lines.extend(
+                f"- {job['date']} {item['time']}（{job['name']}）"
+                for job, item in successful
+            )
+        elif any(job["mode"] == "dry_run" for job in result["jobs"]):
+            lines.append("本次未开启真实预约，未提交任何场次。")
+        else:
+            lines.append("本次未成功预约任何场次。")
+        notifier.send("复旦场馆定时预约结果", "\n".join(lines))
     print(json.dumps({"ok": True, **result}, ensure_ascii=False, indent=2))
     return 0
 

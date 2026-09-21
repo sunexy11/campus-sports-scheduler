@@ -30,7 +30,7 @@ fudan-booking probe --prompt-credentials
 
 1. 登录复旦统一身份认证和预约系统；
 2. 列出“运动场馆预约”专题中的场馆编号与名称；
-3. 输出当前未结束预约的数量。
+3. 输出当前未结束预约的数量，以及按总上限 3 计算出的剩余预约额度。
 
 注意：如果在最后一步看到“`UIS CAS 票据兑换 HTTP 412`”，说明预约站点下发了瑞数
 JavaScript 反爬校验。此时账号密码通常已经通过 UIS，失败点在预约站点的前置校验，
@@ -89,6 +89,28 @@ FUDAN_TOTP_SECRET       可选，仅在 UIS 明确要求 TOTP 时使用
 来降低 GitHub 原生定时任务的延迟风险，但仍不能消除 Runner 排队、站点限流或瑞数校验变化。
 正式启用前仍需先完成不提交演练。
 
+## 三个地方分别负责什么
+
+请把配置分成三层理解，不要混在一起：
+
+1. `config/config.example.yaml` 是“预约什么”。这里修改场馆、球类、日期、时间段、优先级和
+   `max_new_reservations`，并随代码一起提交到仓库。
+2. `.github/workflows/*.yml` 是“如何运行”。`allow_booking` 默认值只影响你在 GitHub 页面上
+   手动点击 **Run workflow** 时的表单默认值；`wait_until` 默认值只影响没有通过请求体传入时间时的
+   手动运行。正常使用 Cron-job.org 时，不要为了每次测试去改这些默认值。
+3. Cron-job.org 请求体是“这一次是否真的提交”。定时预约请求传
+   `allow_booking: true` 和 `wait_until: "07:00"`；监控请求传 `allow_booking: true` 或 `false`。
+   它只决定本次运行是否允许提交，不改变仓库配置。
+
+`monitor.jobs[].mode` 和 `allow_booking` 看起来相似，但职责不同：
+
+- `mode: monitor_only`：这个目标永远只报告空位，不会预约；即使本次 `allow_booking: true` 也不会提交。
+- `mode: auto_book_if_capacity`：这个目标具备自动预约资格，但只有本次运行的 `allow_booking: true` 时才会提交。
+- `allow_booking` 是一个总开关，专门防止 Cron 请求或手动测试意外产生真实预约。
+
+因此，通常只需要改 `config/config.example.yaml` 的目标；上线前把 Cron-job.org 请求体中的
+`allow_booking` 从 `false` 改为 `true`。工作流默认值保持不动即可。
+
 ## Cron-job.org 自动触发
 
 定时预约和五分钟监控的外部触发配置见 [Cron-job.org 配置指南](CRON_JOB_ORG.md)。该方案需要一个
@@ -141,8 +163,8 @@ fudan-booking scheduled-book-once --config config/config.example.yaml
 fudan-booking monitor-once --config config/config.example.yaml --allow-booking
 ```
 
-每次提交前都会重新检查未结束预约数量。提交期间若空位被抢走，会输出
-`slot_unavailable` 并继续尝试其他候选，不会使任务失败；达到三个未结束预约后只监控、不再提交。
+每次运行前会从网站重新读取未结束预约数量，并按账户剩余额度限制本次提交。提交期间若空位被抢走，会输出
+`slot_unavailable` 并继续尝试其他候选，不会使任务失败；达到三个未结束预约后跳过本次查询和预约。
 其中 `monitor.jobs` 可以配置多个任务。每个任务的 `dates` 可写成偏移量列表，例如
 `[0, 1, 2]` 表示今天、明天、后天，`[1, 2]` 表示明天和后天，`[]` 表示本轮跳过日期查询；
 原来的 `next_3_days` 和明确的 `YYYY-MM-DD` 日期列表仍兼容。多个任务共享总计三个未结束预约的
@@ -151,11 +173,17 @@ fudan-booking monitor-once --config config/config.example.yaml --allow-booking
 如果你已经预约过某个时间段，提交接口可能返回“预约时间不可重叠”。程序会把它记录为
 `overlap_with_existing`，跳过当前候选并继续尝试其他候选，不会因此终止本轮监控或定时抢场。
 
-如果提交接口返回 HTTP 412，Node/JSDOM 桥会先对同域瑞数挑战 HTML 等待最多 1 秒并重试原请求。
+如果提交接口返回 HTTP 412，Node/JSDOM 桥会先对同域瑞数挑战 HTML 等待最多 3 秒并重试原请求。
 如果第二次提交仍返回 412，桥会再执行一轮挑战，最多等待 5 秒后进行最后一次提交；只有仍然
 失败时，程序才会明确报告这个问题，不会把它误判成“场地已被抢走”。这两个等待时间可以分别通过
 `FUDAN_POST_CHALLENGE_TIMEOUT_MS` 和 `FUDAN_POST_RETRY_CHALLENGE_TIMEOUT_MS` 覆盖，默认值是
-`1000` 和 `5000` 毫秒。
+`3000` 和 `5000` 毫秒。
+
+预约或监控开始前，程序会从网站读取当前未结束预约数，并用“3 减去已有数量”和任务的
+`max_new_reservations` 取较小值作为本次最多新增数量。已有预约达到 3 个，或某个任务的
+`max_new_reservations` 为 0 时，该任务会直接跳过，不再查询场地。定时预约、监控自动预约和
+定时预约成功或失败时会发送简短结果邮件；监控模式只有发现至少一个空位时才发送邮件，邮件列出
+有空位的场馆、日期、时间和空余数量。自动预约监控还会标注每个空位的预约结果。
 
 ## Cloudflare
 

@@ -13,7 +13,7 @@ GitHub Actions 需要 Node 24 与 challenge 依赖，Python 会在同一进程�
 - 每天 07:00 开放后天场地。
 - 最多允许三个未结束预约。
 - 子场地由系统随机分配，配置单位是“场馆 + 球类”。
-- 达到三个预约后继续监控和提醒，但不再自动预约。
+- 网站已有三个未结束预约时，本轮直接跳过查询和预约；不会取消已有预约。
 - 本项目永远不会自动取消已有预约。
 - 定时预约和五分钟监控统一通过 Cron-job.org 调用 GitHub `workflow_dispatch`，不依赖 GitHub 原生 `schedule` 的准点性。
 - 监控暂不部署到 Cloudflare Worker；当前 Node/JSDOM 会话桥先在 GitHub Actions/Node 环境验证。

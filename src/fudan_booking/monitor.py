@@ -59,6 +59,17 @@ def _find_resource(resources: list[ResourceSummary], venue: str, sport: str) -> 
     return matches[0]
 
 
+def _unfinished_count(client: BookingReadClient) -> int:
+    """Read the account-wide unfinished count from the booking site.
+
+    A small fallback keeps the pure read-only test doubles backwards
+    compatible; the real client always implements ``list_unfinished``.
+    """
+
+    reader = getattr(client, "list_unfinished", None)
+    return len(reader()) if callable(reader) else 0
+
+
 def _scan_monitor_jobs(
     client: BookingReadClient,
     config: dict[str, Any],
@@ -70,29 +81,52 @@ def _scan_monitor_jobs(
     resources = client.list_resources()
     findings: list[dict[str, Any]] = []
     for job_index, job in enumerate(config.get("monitor", {}).get("jobs", [])):
+        # max_new_reservations=0 explicitly disables this job.  This avoids
+        # polling a target that the user has no remaining budget to book.
+        max_new = max(0, int(job.get("max_new_reservations", 1)))
+        if max_new == 0:
+            continue
         resource = _find_resource(resources, str(job["venue"]), str(job["sport"]))
         wanted_times = {normalize_time_range(str(item)) for item in job.get("times", [])}
         for target_date in _target_dates(job.get("dates"), today):
             availability = client.get_availability(resource.resource_id, target_date)
-            for period in availability.periods:
-                if normalize_time_range(period.time) not in wanted_times or not period.available:
-                    continue
+            periods_by_time = {
+                normalize_time_range(period.time): period
+                for period in availability.periods
+            }
+            for wanted_time in sorted(wanted_times):
+                period = periods_by_time.get(wanted_time)
+                if period is None:
+                    # Keep a configured target visible in the report even if
+                    # the API did not return that period in this snapshot.
+                    period_id = None
+                    available_count = 0
+                    total_count = 0
+                    available_ids: tuple[int, ...] = ()
+                    display_time = wanted_time
+                else:
+                    period_id = period.period_id
+                    available_count = period.available_sub_resources
+                    total_count = period.total_sub_resources
+                    available_ids = period.available_sub_resource_ids
+                    display_time = period.time
                 findings.append(
                     {
                         "name": str(job.get("name") or resource.name),
                         "resource_id": resource.resource_id,
                         "date": target_date.isoformat(),
-                        "time": period.time,
-                        "available_sub_resources": period.available_sub_resources,
+                        "time": display_time,
+                        "available_sub_resources": available_count,
                         "occupied_sub_resources": (
-                            period.total_sub_resources - period.available_sub_resources
+                            total_count - available_count
                         ),
-                        "total_sub_resources": period.total_sub_resources,
+                        "total_sub_resources": total_count,
+                        "_available": bool(period and period.available),
                         "_job_index": job_index,
                         "_mode": str(job.get("mode") or "monitor_only"),
-                        "_max_new_reservations": int(job.get("max_new_reservations", 1)),
-                        "_period_id": period.period_id,
-                        "_available_sub_resource_ids": period.available_sub_resource_ids,
+                        "_max_new_reservations": max_new,
+                        "_period_id": period_id,
+                        "_available_sub_resource_ids": available_ids,
                     }
                 )
     return findings
@@ -112,20 +146,31 @@ def monitor_once(
     """Check configured slots once and optionally send one consolidated email."""
 
     today = today or datetime.now(ZoneInfo("Asia/Shanghai")).date()
+    jobs = [
+        job
+        for job in config.get("monitor", {}).get("jobs", [])
+        if max(0, int(job.get("max_new_reservations", 1))) > 0
+    ]
+    if not jobs:
+        return []
+    unfinished_count = _unfinished_count(client)
+    max_unfinished = _max_unfinished_reservations(config)
+    if unfinished_count >= max_unfinished:
+        return []
+
+    internal = _scan_monitor_jobs(client, config, today=today)
     findings = [
-        _public_finding(item)
-        for item in _scan_monitor_jobs(client, config, today=today)
+        _public_finding(item) for item in internal if item.get("_available")
     ]
 
     if findings and notifier is not None:
-        lines = ["检测到以下场馆时段有空位：", ""]
+        lines = ["复旦场馆空位提醒：", ""]
         lines.extend(
             f"- {item['name']} | {item['date']} | {item['time']} | "
-            f"空余 {item['available_sub_resources']}/{item['total_sub_resources']} 个，"
-            f"已占用 {item['occupied_sub_resources']} 个"
+            f"空余 {item['available_sub_resources']}/{item['total_sub_resources']} 个"
             for item in findings
         )
-        notifier.send("复旦场馆空位提醒", "\n".join(lines))
+        notifier.send("复旦场馆空位监控汇总", "\n".join(lines))
     return findings
 
 
@@ -146,20 +191,75 @@ def monitor_and_book_once(
     newly exposed sub-resource to be tried without creating an infinite loop.
     """
 
-    if not allow_booking:
-        findings = monitor_once(client, config, notifier, today=today)
-        return {"findings": findings, "booking_results": [], "rounds": 1}
     if max_rounds < 1:
         raise ValueError("max_rounds must be positive")
 
     today = today or datetime.now(ZoneInfo("Asia/Shanghai")).date()
+    configured_jobs = [
+        job
+        for job in config.get("monitor", {}).get("jobs", [])
+        if max(0, int(job.get("max_new_reservations", 1))) > 0
+    ]
+    if not configured_jobs:
+        return {
+            "findings": [],
+            "target_slots": [],
+            "booking_results": [],
+            "rounds": 0,
+            "stop_reason": "no_monitorable_jobs",
+        }
+
+    initial_unfinished = _unfinished_count(client)
+    max_unfinished = _max_unfinished_reservations(config)
+    remaining_capacity = max(0, max_unfinished - initial_unfinished)
+    if remaining_capacity <= 0:
+        return {
+            "findings": [],
+            "target_slots": [],
+            "booking_results": [],
+            "rounds": 0,
+            "stop_reason": "capacity_reached",
+            "unfinished_reservation_count": initial_unfinished,
+            "remaining_capacity": 0,
+        }
+
+    if not allow_booking:
+        latest_internal = _scan_monitor_jobs(client, config, today=today)
+        target_slots = [_public_finding(item) for item in latest_internal]
+        findings = [
+            _public_finding(item)
+            for item in latest_internal
+            if item.get("_available")
+        ]
+        for public_item in target_slots:
+            public_item["booking_status"] = (
+                "无空位"
+                if not public_item["available_sub_resources"]
+                else "未开启自动预约"
+            )
+        if findings and notifier is not None:
+            lines = ["复旦场馆空位提醒：", ""]
+            lines.extend(
+                f"- {item['name']} | {item['date']} | {item['time']} | "
+                f"空余 {item['available_sub_resources']}/{item['total_sub_resources']} 个"
+                for item in findings
+            )
+            notifier.send("复旦场馆空位监控汇总", "\n".join(lines))
+        return {
+            "findings": findings,
+            "target_slots": target_slots,
+            "booking_results": [],
+            "rounds": 1 if latest_internal else 0,
+            "stop_reason": "processed" if latest_internal else "no_findings",
+            "unfinished_reservation_count": initial_unfinished,
+            "remaining_capacity": remaining_capacity,
+        }
+
     attempted: set[tuple[object, ...]] = set()
     booking_results: list[dict[str, Any]] = []
     latest_internal: list[dict[str, Any]] = []
     successful_by_job: dict[int, int] = {}
     successful_total = 0
-    initial_unfinished: int | None = None
-    max_unfinished = _max_unfinished_reservations(config)
     stop_reason = "no_findings"
 
     for round_number in range(1, max_rounds + 1):
@@ -167,7 +267,8 @@ def monitor_and_book_once(
         candidates = [
             item
             for item in latest_internal
-            if item["_mode"] == "auto_book_if_capacity"
+            if item.get("_available")
+            and item["_mode"] == "auto_book_if_capacity"
             and successful_by_job.get(item["_job_index"], 0)
             < item["_max_new_reservations"]
         ]
@@ -191,9 +292,7 @@ def monitor_and_book_once(
             if key in attempted:
                 continue
             attempted.add(key)
-            unfinished_count = len(client.list_unfinished())
-            if initial_unfinished is None:
-                initial_unfinished = unfinished_count
+            unfinished_count = _unfinished_count(client)
             effective_unfinished = max(
                 unfinished_count,
                 initial_unfinished + successful_total,
@@ -211,6 +310,7 @@ def monitor_and_book_once(
             )
             booking_results.append(
                 {
+                    "_job_index": job_index,
                     "name": item["name"],
                     "date": item["date"],
                     "time": item["time"],
@@ -282,28 +382,52 @@ def monitor_and_book_once(
     else:
         stop_reason = "max_rounds"
 
-    findings = [_public_finding(item) for item in latest_internal]
-    if (findings or booking_results) and notifier is not None:
-        lines = ["检测到以下场馆时段有空位：", ""]
-        lines.extend(
-            f"- {item['name']} | {item['date']} | {item['time']} | "
-            f"空余 {item['available_sub_resources']}/{item['total_sub_resources']} 个，"
-            f"已占用 {item['occupied_sub_resources']} 个"
-            for item in findings
-        )
-        if booking_results:
+    target_slots = [_public_finding(item) for item in latest_internal]
+    findings = [
+        _public_finding(item)
+        for item in latest_internal
+        if item.get("_available")
+    ]
+    if findings and notifier is not None:
+        result_by_slot = {
+            (item["_job_index"], item["date"], item["time"]): item
+            for item in booking_results
+        }
+        lines = ["复旦场馆监控及预约汇总："]
+        successful = [item for item in booking_results if item["ok"]]
+        if successful:
+            lines.extend(["", "本次成功预约："])
             lines.extend(
-                ["", "预约尝试："]
-                + [
-                    f"- {item['date']} {item['time']}："
-                    f"{'成功' if item['ok'] else '跳过（' + item['reason'] + '）'}"
-                    for item in booking_results
-                ]
+                f"- {item['name']} | {item['date']} | {item['time']}"
+                for item in successful
             )
-        notifier.send("复旦场馆空位提醒", "\n".join(lines))
+        lines.extend(["", "发现空位："])
+        for internal_item, item in zip(latest_internal, target_slots):
+            if not internal_item.get("_available"):
+                continue
+            key = (internal_item["_job_index"], item["date"], item["time"])
+            attempt = result_by_slot.get(key)
+            if not item["available_sub_resources"]:
+                status = "无空位"
+            elif attempt is not None:
+                status = "预约成功" if attempt["ok"] else f"预约未成功（{attempt['reason']}）"
+            elif internal_item["_mode"] != "auto_book_if_capacity":
+                status = "仅监控"
+            else:
+                status = "未尝试"
+            item["booking_status"] = status
+            lines.append(
+                f"- {item['name']} | {item['date']} | {item['time']} | "
+                f"空余 {item['available_sub_resources']}/{item['total_sub_resources']} 个 | "
+                f"预约状态：{status}"
+            )
+        notifier.send("复旦场馆监控及预约汇总", "\n".join(lines))
     return {
         "findings": findings,
-        "booking_results": booking_results,
+        "target_slots": target_slots,
+        "booking_results": [_public_finding(item) for item in booking_results],
         "rounds": round_number if latest_internal else 0,
         "stop_reason": stop_reason,
+        "unfinished_reservation_count": initial_unfinished,
+        "remaining_capacity": remaining_capacity,
     }

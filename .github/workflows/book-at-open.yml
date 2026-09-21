@@ -11,7 +11,7 @@ on:
       wait_until:
         description: Temporary test value; wait until this Asia/Shanghai time before submitting
         required: true
-        default: "14:05"
+        default: "07:00"
         type: string
 
 permissions:
@@ -30,6 +30,9 @@ jobs:
       FUDAN_PASSWORD: ${{ secrets.FUDAN_PASSWORD }}
       FUDAN_TOTP_SECRET: ${{ secrets.FUDAN_TOTP_SECRET }}
       FUDAN_NODE_BIN: node
+      QQ_SMTP_USERNAME: ${{ secrets.QQ_SMTP_USERNAME }}
+      QQ_SMTP_AUTH_CODE: ${{ secrets.QQ_SMTP_AUTH_CODE }}
+      NOTIFICATION_EMAIL: ${{ secrets.NOTIFICATION_EMAIL }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

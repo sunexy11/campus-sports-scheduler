@@ -13,7 +13,7 @@ scheduled_jobs:
     login_at: "14:00"
     submit_at: "14:05"
     strategy: consecutive_first
-    max_new_reservations: 1
+    max_new_reservations: 2
     fallback_to_single_slot: true
     preferences:
       - venue: 北区体育馆
@@ -33,17 +33,17 @@ monitor:
     - name: 晚间北区体育馆羽毛球监控
       venue: 北区体育馆
       sport: 羽毛球
-      dates: [0, 1, 2]
-      times: ["19:00-20:00", "20:00-21:00", "21:00-22:00"]
-      mode: monitor_only
-      max_new_reservations: 0
+      dates: [1, 2]
+      times: ["19:00-20:00", "20:00-21:00"]
+      mode: auto_book_if_capacity
+      max_new_reservations: 2
     - name: 晚间正大体育馆羽毛球监控
       venue: 正大体育馆
       sport: 羽毛球
-      dates: [0, 1, 2]
+      dates: [1, 2]
       times: ["19:00-20:00", "20:00-21:00", "21:00-22:00"]
-      mode: monitor_only
-      max_new_reservations: 0
+      mode: auto_book_if_capacity
+      max_new_reservations: 2
 
 notification:
   provider: qq_smtp

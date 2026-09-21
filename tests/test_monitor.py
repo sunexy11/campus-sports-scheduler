@@ -119,6 +119,96 @@ def test_monitor_matches_non_zero_padded_config_time():
     assert findings[0]["time"] == "09:00-10:00"
 
 
+def test_monitor_report_keeps_configured_unavailable_slots():
+    notifier = FakeNotifier()
+    result = monitor_and_book_once(
+        FakeClient(),
+        {
+            "monitor": {
+                "jobs": [
+                    {
+                        "name": "北区晚间羽毛球",
+                        "venue": "北区体育馆",
+                        "sport": "羽毛球",
+                        "dates": ["2026-09-22"],
+                        "times": ["19:00-20:00", "20:00-21:00"],
+                        "mode": "monitor_only",
+                        "max_new_reservations": 1,
+                    }
+                ]
+            }
+        },
+        notifier,
+        today=date(2026, 9, 20),
+        allow_booking=False,
+    )
+
+    assert len(result["findings"]) == 1
+    assert [item["time"] for item in result["target_slots"]] == [
+        "19:00-20:00",
+        "20:00-21:00",
+    ]
+    assert result["target_slots"][1]["available_sub_resources"] == 0
+    assert "20:00-21:00" not in notifier.messages[0][1]
+
+
+def test_monitor_does_not_email_when_every_target_is_full():
+    notifier = FakeNotifier()
+    result = monitor_and_book_once(
+        FakeClient(),
+        {
+            "monitor": {
+                "jobs": [
+                    {
+                        "venue": "北区体育馆",
+                        "sport": "羽毛球",
+                        "dates": ["2026-09-22"],
+                        "times": ["20:00-21:00"],
+                        "mode": "monitor_only",
+                        "max_new_reservations": 1,
+                    }
+                ]
+            }
+        },
+        notifier,
+        today=date(2026, 9, 20),
+        allow_booking=False,
+    )
+
+    assert result["findings"] == []
+    assert notifier.messages == []
+
+
+def test_monitor_skips_site_queries_at_account_limit():
+    class FullClient(FakeClient):
+        def list_unfinished(self):
+            return [{}, {}, {}]
+
+        def list_resources(self):
+            raise AssertionError("should not query resources at the limit")
+
+    result = monitor_and_book_once(
+        FullClient(),
+        {
+            "monitor": {
+                "jobs": [
+                    {
+                        "venue": "北区体育馆",
+                        "sport": "羽毛球",
+                        "dates": ["2026-09-22"],
+                        "times": ["19:00-20:00"],
+                        "max_new_reservations": 1,
+                    }
+                ]
+            }
+        },
+        today=date(2026, 9, 20),
+    )
+
+    assert result["stop_reason"] == "capacity_reached"
+    assert result["remaining_capacity"] == 0
+
+
 class RacingClient(FakeClient):
     def __init__(self):
         self.submit_calls = []

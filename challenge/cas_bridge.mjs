@@ -29,11 +29,11 @@ function challengeTimeout(name, fallback) {
   return Number.isFinite(configured) && configured >= 1000 ? configured : fallback;
 }
 
-// 瑞数通常会在首轮挑战期间写入 cookie。首轮只等待 1 秒以争取速度；
+// 瑞数通常会在首轮挑战期间写入 cookie。首轮等待最多 3 秒；
 // 如果紧接着的第二次 POST 仍收到 412，再给第二轮挑战最多 5 秒。
 const POST_CHALLENGE_TIMEOUT_MS = challengeTimeout(
   "FUDAN_POST_CHALLENGE_TIMEOUT_MS",
-  1000,
+  3000,
 );
 const POST_RETRY_CHALLENGE_TIMEOUT_MS = challengeTimeout(
   "FUDAN_POST_RETRY_CHALLENGE_TIMEOUT_MS",

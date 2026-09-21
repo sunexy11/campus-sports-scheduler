@@ -76,3 +76,35 @@ def test_scheduled_booking_continues_after_racing_rejection():
 
     assert len(result["jobs"][0]["results"]) == 2
     assert all(item["reason"] == "slot_unavailable" for item in result["jobs"][0]["results"])
+
+
+def test_scheduled_booking_clamps_to_existing_account_capacity():
+    class ExistingClient(FakeScheduledClient):
+        def list_unfinished(self):
+            return [{}, {}]
+
+    client = ExistingClient()
+    result = scheduled_book_once(
+        client, _config(), today=date(2026, 9, 20), allow_booking=False
+    )
+
+    assert result["unfinished_reservation_count"] == 2
+    assert result["remaining_capacity"] == 1
+    assert result["jobs"][0]["planned"] == ["19:00-20:00"]
+
+
+def test_scheduled_booking_skips_site_queries_when_job_budget_is_zero():
+    class NoQueryClient(FakeScheduledClient):
+        def list_unfinished(self):
+            raise AssertionError("should not read reservations")
+
+        def list_resources(self):
+            raise AssertionError("should not read resources")
+
+    config = _config()
+    config["scheduled_jobs"][0]["max_new_reservations"] = 0
+    result = scheduled_book_once(
+        NoQueryClient(), config, today=date(2026, 9, 20), allow_booking=True
+    )
+
+    assert result["jobs"][0]["stop_reason"] == "max_new_reservations_zero"

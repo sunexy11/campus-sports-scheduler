@@ -19,6 +19,8 @@ def _scheduled_candidates(
     job: dict[str, Any],
     resources: list[ResourceSummary],
     target_date: date,
+    *,
+    max_new: int | None = None,
 ) -> tuple[list[SlotKey], dict[SlotKey, tuple[int, int, tuple[int, ...]]]]:
     preferences: list[BlockPreference] = []
     availability_by_key: dict[SlotKey, tuple[int, int, tuple[int, ...]]] = {}
@@ -61,7 +63,11 @@ def _scheduled_candidates(
         available=available,
         unfinished=0,
         maximum=3,
-        max_new=int(job.get("max_new_reservations", 1)),
+        max_new=(
+            int(job.get("max_new_reservations", 1))
+            if max_new is None
+            else max_new
+        ),
         fallback_to_single=bool(job.get("fallback_to_single_slot", True)),
     )
     ordered = list(plan.selected)
@@ -90,7 +96,6 @@ def scheduled_book_once(
     """
 
     jobs = [job for job in config.get("scheduled_jobs", []) if job.get("enabled")]
-    resources = client.list_resources()
     output: list[dict[str, Any]] = []
     limits = config.get("limits")
     max_unfinished = (
@@ -99,16 +104,45 @@ def scheduled_book_once(
         else 3
     )
     successful_total = 0
-    initial_unfinished: int | None = None
+    # This is deliberately read from the site's reservation list, rather than
+    # inferred from the local config.  One account-wide limit is shared by all
+    # scheduled jobs in this run.
+    needs_capacity_check = any(
+        max(0, int(job.get("max_new_reservations", 1))) > 0 for job in jobs
+    )
+    initial_unfinished = len(client.list_unfinished()) if needs_capacity_check else 0
+    remaining_capacity = max(0, max_unfinished - initial_unfinished)
+    resources: list[ResourceSummary] | None = None
     for job in jobs:
         target_date = today + timedelta(days=int(job.get("date_offset", 2)))
-        candidates, details = _scheduled_candidates(client, job, resources, target_date)
+        configured_max_new = max(0, int(job.get("max_new_reservations", 1)))
+        budget = min(
+            configured_max_new,
+            max(0, max_unfinished - (initial_unfinished + successful_total)),
+        )
         item: dict[str, Any] = {
             "name": str(job.get("name") or "scheduled booking"),
             "date": target_date.isoformat(),
-            "planned": [slot.time for slot in candidates[: int(job.get("max_new_reservations", 1))]],
+            "planned": [],
             "results": [],
         }
+        if configured_max_new == 0:
+            item["mode"] = "booking" if allow_booking else "dry_run"
+            item["stop_reason"] = "max_new_reservations_zero"
+            output.append(item)
+            continue
+        if budget <= 0:
+            item["mode"] = "booking" if allow_booking else "dry_run"
+            item["stop_reason"] = "capacity_reached"
+            output.append(item)
+            continue
+
+        if resources is None:
+            resources = client.list_resources()
+        candidates, details = _scheduled_candidates(
+            client, job, resources, target_date, max_new=budget
+        )
+        item["planned"] = [slot.time for slot in candidates[:budget]]
         if not allow_booking:
             item["mode"] = "dry_run"
             output.append(item)
@@ -116,13 +150,10 @@ def scheduled_book_once(
 
         item["mode"] = "booking"
         successful = 0
-        max_new = int(job.get("max_new_reservations", 1))
         for slot in candidates:
-            if successful >= max_new:
+            if successful >= budget:
                 break
             unfinished_count = len(client.list_unfinished())
-            if initial_unfinished is None:
-                initial_unfinished = unfinished_count
             effective_unfinished = max(
                 unfinished_count,
                 initial_unfinished + successful_total,
@@ -201,4 +232,9 @@ def scheduled_book_once(
                 successful_total += 1
         item.setdefault("stop_reason", "processed")
         output.append(item)
-    return {"mode": "scheduled_book_once", "jobs": output}
+    return {
+        "mode": "scheduled_book_once",
+        "unfinished_reservation_count": initial_unfinished,
+        "remaining_capacity": remaining_capacity,
+        "jobs": output,
+    }
