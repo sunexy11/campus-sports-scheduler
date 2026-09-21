@@ -9,9 +9,9 @@ on:
         default: false
         type: boolean
       wait_until:
-        description: Wait until this Asia/Shanghai time before querying and submitting
+        description: Temporary test value; wait until this Asia/Shanghai time before submitting
         required: true
-        default: "07:00"
+        default: "14:00"
         type: string
 
 permissions:
