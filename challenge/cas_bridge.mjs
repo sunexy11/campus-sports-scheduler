@@ -24,14 +24,21 @@ const READ_ONLY_PATHS = new Set([
   "/reservation/site/appointment/appointment-list",
 ]);
 const BOOKING_PATH = "/reservation/site/resource/launch";
-const configuredChallengeTimeout = Number.parseInt(
-  process.env.FUDAN_POST_CHALLENGE_TIMEOUT_MS || "15000",
-  10,
+function challengeTimeout(name, fallback) {
+  const configured = Number.parseInt(process.env[name] || String(fallback), 10);
+  return Number.isFinite(configured) && configured >= 1000 ? configured : fallback;
+}
+
+// 瑞数通常会在首轮挑战期间写入 cookie。首轮只等待 1 秒以争取速度；
+// 如果紧接着的第二次 POST 仍收到 412，再给第二轮挑战最多 5 秒。
+const POST_CHALLENGE_TIMEOUT_MS = challengeTimeout(
+  "FUDAN_POST_CHALLENGE_TIMEOUT_MS",
+  1000,
 );
-const POST_CHALLENGE_TIMEOUT_MS = Number.isFinite(configuredChallengeTimeout)
-  && configuredChallengeTimeout >= 1000
-  ? configuredChallengeTimeout
-  : 15000;
+const POST_RETRY_CHALLENGE_TIMEOUT_MS = challengeTimeout(
+  "FUDAN_POST_RETRY_CHALLENGE_TIMEOUT_MS",
+  5000,
+);
 
 function assertBookingUrl(value) {
   const parsed = new URL(value);
@@ -122,7 +129,7 @@ async function fetchBookingPost(url, cookieJar, referer, body) {
   return response;
 }
 
-async function executePostChallenge(response, cookieJar, referer) {
+async function executePostChallenge(response, cookieJar, referer, timeoutMs) {
   const contentType = response.headers.get("content-type") || "";
   if (response.status !== 412 || !contentType.includes("text/html")) {
     return { attempted: false, completed: false, elapsed_ms: null };
@@ -181,7 +188,7 @@ async function executePostChallenge(response, cookieJar, referer) {
   const completed = await Promise.race([
     exited.then(() => true),
     new Promise((resolve) =>
-      setTimeout(() => resolve(false), POST_CHALLENGE_TIMEOUT_MS),
+      setTimeout(() => resolve(false), timeoutMs),
     ),
   ]);
   dom.window.close();
@@ -316,9 +323,16 @@ async function handleBooking(request) {
   );
   const firstPostElapsedMs = Math.round(performance.now() - firstPostStartedAt);
   let challenge = null;
+  let retryChallenge = null;
   let retryPostElapsedMs = null;
+  let finalPostElapsedMs = null;
   if (response.status === 412) {
-    challenge = await executePostChallenge(response, state.cookieJar, state.ticketUrl);
+    challenge = await executePostChallenge(
+      response,
+      state.cookieJar,
+      state.ticketUrl,
+      POST_CHALLENGE_TIMEOUT_MS,
+    );
     if (challenge.attempted) {
       const retryPostStartedAt = performance.now();
       response = await fetchBookingPost(
@@ -328,6 +342,24 @@ async function handleBooking(request) {
         form,
       );
       retryPostElapsedMs = Math.round(performance.now() - retryPostStartedAt);
+      if (response.status === 412) {
+        retryChallenge = await executePostChallenge(
+          response,
+          state.cookieJar,
+          state.ticketUrl,
+          POST_RETRY_CHALLENGE_TIMEOUT_MS,
+        );
+        if (retryChallenge.attempted) {
+          const finalPostStartedAt = performance.now();
+          response = await fetchBookingPost(
+            `${"https://"}${BOOKING_HOST}${BOOKING_PATH}`,
+            state.cookieJar,
+            state.ticketUrl,
+            form,
+          );
+          finalPostElapsedMs = Math.round(performance.now() - finalPostStartedAt);
+        }
+      }
     }
   }
   const body = await response.text();
@@ -341,8 +373,11 @@ async function handleBooking(request) {
       submit_elapsed_ms: Math.round(performance.now() - startedAt),
       first_post_elapsed_ms: firstPostElapsedMs,
       retry_post_elapsed_ms: retryPostElapsedMs,
+      final_post_elapsed_ms: finalPostElapsedMs,
       challenge_elapsed_ms: challenge?.elapsed_ms ?? null,
       challenge_completed: challenge?.completed ?? null,
+      retry_challenge_elapsed_ms: retryChallenge?.elapsed_ms ?? null,
+      retry_challenge_completed: retryChallenge?.completed ?? null,
     },
   };
 }

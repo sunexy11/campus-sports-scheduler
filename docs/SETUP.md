@@ -143,8 +143,11 @@ fudan-booking monitor-once --config config/config.example.yaml --allow-booking
 如果你已经预约过某个时间段，提交接口可能返回“预约时间不可重叠”。程序会把它记录为
 `overlap_with_existing`，跳过当前候选并继续尝试其他候选，不会因此终止本轮监控或定时抢场。
 
-如果提交接口返回 HTTP 412，Node/JSDOM 桥会对同域瑞数挑战 HTML 执行一次校验并重试原请求。
-重试后仍为 412 时，程序才会明确报告这个问题，不会把它误判成“场地已被抢走”。
+如果提交接口返回 HTTP 412，Node/JSDOM 桥会先对同域瑞数挑战 HTML 等待最多 1 秒并重试原请求。
+如果第二次提交仍返回 412，桥会再执行一轮挑战，最多等待 5 秒后进行最后一次提交；只有仍然
+失败时，程序才会明确报告这个问题，不会把它误判成“场地已被抢走”。这两个等待时间可以分别通过
+`FUDAN_POST_CHALLENGE_TIMEOUT_MS` 和 `FUDAN_POST_RETRY_CHALLENGE_TIMEOUT_MS` 覆盖，默认值是
+`1000` 和 `5000` 毫秒。
 
 ## Cloudflare
 

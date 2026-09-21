@@ -234,6 +234,11 @@ def monitor_and_book_once(
                         else {}
                     ),
                     **(
+                        {"final_post_elapsed_ms": result.final_post_elapsed_ms}
+                        if result.final_post_elapsed_ms is not None
+                        else {}
+                    ),
+                    **(
                         {"challenge_elapsed_ms": result.challenge_elapsed_ms}
                         if result.challenge_elapsed_ms is not None
                         else {}
@@ -241,6 +246,20 @@ def monitor_and_book_once(
                     **(
                         {"challenge_completed": result.challenge_completed}
                         if result.challenge_completed is not None
+                        else {}
+                    ),
+                    **(
+                        {
+                            "retry_challenge_elapsed_ms": result.retry_challenge_elapsed_ms
+                        }
+                        if result.retry_challenge_elapsed_ms is not None
+                        else {}
+                    ),
+                    **(
+                        {
+                            "retry_challenge_completed": result.retry_challenge_completed
+                        }
+                        if result.retry_challenge_completed is not None
                         else {}
                     ),
                 }

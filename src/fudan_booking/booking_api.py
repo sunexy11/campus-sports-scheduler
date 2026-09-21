@@ -86,8 +86,11 @@ class BookingSubmission:
     submit_elapsed_ms: int | None = None
     first_post_elapsed_ms: int | None = None
     retry_post_elapsed_ms: int | None = None
+    final_post_elapsed_ms: int | None = None
     challenge_elapsed_ms: int | None = None
     challenge_completed: bool | None = None
+    retry_challenge_elapsed_ms: int | None = None
+    retry_challenge_completed: bool | None = None
 
 
 def _booking_rejection_reason(message: str) -> str | None:
@@ -316,10 +319,20 @@ class BookingReadClient:
             "submit_elapsed_ms": integer("X-Fudan-Submit-Elapsed-Ms"),
             "first_post_elapsed_ms": integer("X-Fudan-First-Post-Elapsed-Ms"),
             "retry_post_elapsed_ms": integer("X-Fudan-Retry-Post-Elapsed-Ms"),
+            "final_post_elapsed_ms": integer("X-Fudan-Final-Post-Elapsed-Ms"),
             "challenge_elapsed_ms": integer("X-Fudan-Challenge-Elapsed-Ms"),
             "challenge_completed": (
                 completed.lower() == "true"
                 if isinstance(completed, str)
+                else None
+            ),
+            "retry_challenge_elapsed_ms": integer(
+                "X-Fudan-Retry-Challenge-Elapsed-Ms"
+            ),
+            "retry_challenge_completed": (
+                str(headers.get("X-Fudan-Retry-Challenge-Completed", "")).lower()
+                == "true"
+                if headers.get("X-Fudan-Retry-Challenge-Completed") is not None
                 else None
             ),
         }
