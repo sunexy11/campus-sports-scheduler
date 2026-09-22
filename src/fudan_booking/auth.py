@@ -145,7 +145,13 @@ class _CasBridge:
         except (AttributeError, json.JSONDecodeError) as exc:
             raise AuthenticationFailed("CAS 校验桥返回了无效结果") from exc
         if not isinstance(result, dict) or result.get("ok") is not True:
-            raise AuthenticationFailed("CAS 校验桥未能完成预约系统请求")
+            detail = str(result.get("error") or "") if isinstance(result, dict) else ""
+            # Bridge errors are implementation diagnostics, but defensively
+            # redact query values in case a runtime includes the request URL.
+            detail = re.sub(r"([?&](?:ticket|code)=)[^&\s]+", r"\1<redacted>", detail)
+            detail = " ".join(detail.split())[:200]
+            suffix = f"：{detail}" if detail else ""
+            raise AuthenticationFailed(f"CAS 校验桥未能完成预约系统请求{suffix}")
         return result
 
     def get(self, url: str, headers: dict[str, str]) -> requests.Response:
@@ -184,6 +190,10 @@ class _CasBridge:
         timing = result.get("timing")
         if isinstance(timing, dict):
             for key, header in (
+                ("request_elapsed_ms", "X-Fudan-Request-Elapsed-Ms"),
+                ("first_get_elapsed_ms", "X-Fudan-First-Get-Elapsed-Ms"),
+                ("retry_get_elapsed_ms", "X-Fudan-Retry-Get-Elapsed-Ms"),
+                ("final_get_elapsed_ms", "X-Fudan-Final-Get-Elapsed-Ms"),
                 ("submit_elapsed_ms", "X-Fudan-Submit-Elapsed-Ms"),
                 ("first_post_elapsed_ms", "X-Fudan-First-Post-Elapsed-Ms"),
                 ("retry_post_elapsed_ms", "X-Fudan-Retry-Post-Elapsed-Ms"),

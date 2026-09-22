@@ -134,13 +134,17 @@ def test_booking_412_is_reported_as_antibot_challenge() -> None:
         _raise_for_status(response, "CAS 票据兑换")
 
 
-def test_bridge_response_copies_booking_timing_metadata() -> None:
+def test_bridge_response_copies_challenge_timing_metadata() -> None:
     response = _CasBridge._response_from_result(
         {
             "status": 200,
             "content_type": "application/json",
             "body": '{"e":"OK"}',
             "timing": {
+                "request_elapsed_ms": 4123,
+                "first_get_elapsed_ms": 123,
+                "retry_get_elapsed_ms": 456,
+                "final_get_elapsed_ms": 789,
                 "submit_elapsed_ms": 15123,
                 "first_post_elapsed_ms": 12,
                 "retry_post_elapsed_ms": 8,
@@ -152,6 +156,10 @@ def test_bridge_response_copies_booking_timing_metadata() -> None:
         "https://booking.fudan.edu.cn/reservation/site/resource/launch",
     )
 
+    assert response.headers["X-Fudan-Request-Elapsed-Ms"] == "4123"
+    assert response.headers["X-Fudan-First-Get-Elapsed-Ms"] == "123"
+    assert response.headers["X-Fudan-Retry-Get-Elapsed-Ms"] == "456"
+    assert response.headers["X-Fudan-Final-Get-Elapsed-Ms"] == "789"
     assert response.headers["X-Fudan-Submit-Elapsed-Ms"] == "15123"
     assert response.headers["X-Fudan-First-Post-Elapsed-Ms"] == "12"
     assert response.headers["X-Fudan-Retry-Post-Elapsed-Ms"] == "8"

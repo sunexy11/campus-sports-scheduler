@@ -29,13 +29,13 @@ function challengeTimeout(name, fallback) {
   return Number.isFinite(configured) && configured >= 1000 ? configured : fallback;
 }
 
-// 瑞数通常会在首轮挑战期间写入 cookie。首轮最多等待 8 秒；如果重试 POST
-// 仍返回 412，再给第二轮挑战最多 8 秒。
-const POST_CHALLENGE_TIMEOUT_MS = challengeTimeout(
+// 瑞数通常会在挑战期间写入 cookie。首轮最多等待 8 秒；如果重试请求
+// 仍返回 412，再给第二轮挑战最多 8 秒。保留原环境变量名以兼容现有部署。
+const FIRST_CHALLENGE_TIMEOUT_MS = challengeTimeout(
   "FUDAN_POST_CHALLENGE_TIMEOUT_MS",
   8000,
 );
-const POST_RETRY_CHALLENGE_TIMEOUT_MS = challengeTimeout(
+const RETRY_CHALLENGE_TIMEOUT_MS = challengeTimeout(
   "FUDAN_POST_RETRY_CHALLENGE_TIMEOUT_MS",
   8000,
 );
@@ -129,7 +129,7 @@ async function fetchBookingPost(url, cookieJar, referer, body) {
   return response;
 }
 
-async function executePostChallenge(response, cookieJar, referer, timeoutMs) {
+async function executeChallenge(response, cookieJar, referer, timeoutMs) {
   const contentType = response.headers.get("content-type") || "";
   if (response.status !== 412 || !contentType.includes("text/html")) {
     return {
@@ -221,6 +221,66 @@ async function executePostChallenge(response, cookieJar, referer, timeoutMs) {
   };
 }
 
+async function fetchBookingGetWithChallenge(
+  url,
+  cookieJar,
+  referer,
+  extraHeaders = {},
+) {
+  const startedAt = performance.now();
+  const firstGetStartedAt = performance.now();
+  let response = await fetchBookingGet(url, cookieJar, referer, extraHeaders);
+  const firstGetElapsedMs = Math.round(performance.now() - firstGetStartedAt);
+  let challenge = null;
+  let retryChallenge = null;
+  let retryGetElapsedMs = null;
+  let finalGetElapsedMs = null;
+
+  if (response.status === 412) {
+    challenge = await executeChallenge(
+      response,
+      cookieJar,
+      referer,
+      FIRST_CHALLENGE_TIMEOUT_MS,
+    );
+    if (challenge.attempted) {
+      const retryGetStartedAt = performance.now();
+      response = await fetchBookingGet(url, cookieJar, referer, extraHeaders);
+      retryGetElapsedMs = Math.round(performance.now() - retryGetStartedAt);
+      if (response.status === 412) {
+        retryChallenge = await executeChallenge(
+          response,
+          cookieJar,
+          referer,
+          RETRY_CHALLENGE_TIMEOUT_MS,
+        );
+        if (retryChallenge.attempted) {
+          const finalGetStartedAt = performance.now();
+          response = await fetchBookingGet(url, cookieJar, referer, extraHeaders);
+          finalGetElapsedMs = Math.round(performance.now() - finalGetStartedAt);
+        }
+      }
+    }
+  }
+
+  return {
+    response,
+    timing: {
+      request_elapsed_ms: Math.round(performance.now() - startedAt),
+      first_get_elapsed_ms: firstGetElapsedMs,
+      retry_get_elapsed_ms: retryGetElapsedMs,
+      final_get_elapsed_ms: finalGetElapsedMs,
+      challenge_elapsed_ms: challenge?.elapsed_ms ?? null,
+      challenge_completed: challenge?.completed ?? null,
+      challenge_completion_signal: challenge?.completion_signal ?? null,
+      retry_challenge_elapsed_ms: retryChallenge?.elapsed_ms ?? null,
+      retry_challenge_completed: retryChallenge?.completed ?? null,
+      retry_challenge_completion_signal:
+        retryChallenge?.completion_signal ?? null,
+    },
+  };
+}
+
 function positiveInteger(value, name) {
   if (!Number.isInteger(value) || value <= 0) {
     throw new Error(`${name} must be a positive integer`);
@@ -293,6 +353,9 @@ async function runChallenge(ticketUrl) {
     new Promise((resolve) => setTimeout(() => resolve(null), 15000)),
   ]);
   if (nextUrl) {
+    // The initial CAS page has already executed its own challenge in the
+    // jsdom session above. Keep this one-time ticket redemption on the
+    // original path; business GET requests use the retry wrapper later.
     const response = await fetchBookingGet(nextUrl, cookieJar, ticketUrl);
     await response.arrayBuffer();
   }
@@ -321,7 +384,12 @@ async function handle(request) {
   if (!READ_ONLY_PATHS.has(url.pathname)) {
     throw new Error("bridge only permits the configured read-only endpoints");
   }
-  const response = await fetchBookingGet(url.toString(), state.cookieJar, state.ticketUrl, request.headers);
+  const { response, timing } = await fetchBookingGetWithChallenge(
+    url.toString(),
+    state.cookieJar,
+    state.ticketUrl,
+    request.headers,
+  );
   const body = await response.text();
   if (body.length > 4 * 1024 * 1024) throw new Error("response is too large");
   return {
@@ -329,6 +397,7 @@ async function handle(request) {
     status: response.status,
     content_type: response.headers.get("content-type") || "",
     body,
+    timing,
   };
 }
 
@@ -349,11 +418,11 @@ async function handleBooking(request) {
   let retryPostElapsedMs = null;
   let finalPostElapsedMs = null;
   if (response.status === 412) {
-    challenge = await executePostChallenge(
+    challenge = await executeChallenge(
       response,
       state.cookieJar,
       state.ticketUrl,
-      POST_CHALLENGE_TIMEOUT_MS,
+      FIRST_CHALLENGE_TIMEOUT_MS,
     );
     if (challenge.attempted) {
       const retryPostStartedAt = performance.now();
@@ -365,11 +434,11 @@ async function handleBooking(request) {
       );
       retryPostElapsedMs = Math.round(performance.now() - retryPostStartedAt);
       if (response.status === 412) {
-        retryChallenge = await executePostChallenge(
+        retryChallenge = await executeChallenge(
           response,
           state.cookieJar,
           state.ticketUrl,
-          POST_RETRY_CHALLENGE_TIMEOUT_MS,
+          RETRY_CHALLENGE_TIMEOUT_MS,
         );
         if (retryChallenge.attempted) {
           const finalPostStartedAt = performance.now();

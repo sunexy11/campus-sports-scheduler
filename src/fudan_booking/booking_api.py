@@ -410,7 +410,8 @@ class BookingReadClient:
                     ) from exc
                 raise AntiBotChallenge(
                     f"{operation} HTTP 412：booking.fudan.edu.cn 启用了瑞数反爬校验；"
-                    "当前纯 requests 客户端无法完成 JavaScript 校验"
+                    "两轮 Cookie 挑战后仍未通过"
+                    f"{self._read_challenge_timing_suffix(response)}"
                 ) from exc
             raise BookingError(
                 f"{operation} HTTP {response.status_code} ({endpoint})"
@@ -427,6 +428,36 @@ class BookingReadClient:
         if not isinstance(data, dict):
             raise BookingError(f"{operation} returned invalid data")
         return data
+
+    @staticmethod
+    def _read_challenge_timing_suffix(response: requests.Response) -> str:
+        """Return safe GET challenge diagnostics without exposing cookies."""
+
+        headers = getattr(response, "headers", {}) or {}
+        fields = (
+            ("first_get_elapsed_ms", "X-Fudan-First-Get-Elapsed-Ms"),
+            ("challenge_elapsed_ms", "X-Fudan-Challenge-Elapsed-Ms"),
+            (
+                "challenge_completion_signal",
+                "X-Fudan-Challenge-Completion-Signal",
+            ),
+            ("retry_get_elapsed_ms", "X-Fudan-Retry-Get-Elapsed-Ms"),
+            (
+                "retry_challenge_elapsed_ms",
+                "X-Fudan-Retry-Challenge-Elapsed-Ms",
+            ),
+            (
+                "retry_challenge_completion_signal",
+                "X-Fudan-Retry-Challenge-Completion-Signal",
+            ),
+            ("final_get_elapsed_ms", "X-Fudan-Final-Get-Elapsed-Ms"),
+        )
+        details = [
+            f"{label}={headers[header]}"
+            for label, header in fields
+            if headers.get(header) is not None
+        ]
+        return f"；{', '.join(details)}" if details else ""
 
     def list_resources(self, topic_id: int = SPORTS_TOPIC_ID) -> list[ResourceSummary]:
         response = self._get(

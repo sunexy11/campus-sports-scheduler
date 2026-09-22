@@ -6,7 +6,8 @@
 默认以只读联调为主：配置校验、最多三个未结束预约的容量控制、连续时段优先策略、QQ SMTP 通知适配器、UIS 登录和网页日历查询已经建立。受控的体育场馆预约提交也已加入，但必须显式传入 `--allow-booking`。
 
 预约站点目前有瑞数 JavaScript 校验。项目已加入不启动浏览器的 Node/JSDOM 校验桥；本地和
-GitHub Actions 需要 Node 24 与 challenge 依赖，Python 会在同一进程会话中查询只读接口。
+GitHub Actions 需要 Node 24 与 challenge 依赖。预约列表、场馆列表、日历等只读请求和预约提交
+遇到 HTTP 412 时，都会在同一会话内更新 Cookie 并有限重试。
 
 ## 已确认规则
 

@@ -234,6 +234,40 @@ def test_booking_412_reports_challenge_timing_without_cookie_values() -> None:
     assert "final_post_elapsed_ms=4910" in message
 
 
+def test_read_412_reports_bounded_challenge_timing() -> None:
+    response = requests.Response()
+    response.status_code = 412
+    response.url = (
+        "https://booking.fudan.edu.cn/reservation/site/appointment/"
+        "appointment-list?p=1"
+    )
+    response.headers.update(
+        {
+            "X-Fudan-First-Get-Elapsed-Ms": "216",
+            "X-Fudan-Challenge-Elapsed-Ms": "2741",
+            "X-Fudan-Challenge-Completion-Signal": "cookie",
+            "X-Fudan-Retry-Get-Elapsed-Ms": "301",
+            "X-Fudan-Retry-Challenge-Elapsed-Ms": "8004",
+            "X-Fudan-Retry-Challenge-Completion-Signal": "timeout",
+            "X-Fudan-Final-Get-Elapsed-Ms": "287",
+        }
+    )
+    client = BookingReadClient(FakeSession([]))
+
+    with pytest.raises(AntiBotChallenge) as error:
+        client._json(response, "unfinished reservation list")
+
+    message = str(error.value)
+    assert "两轮 Cookie 挑战后仍未通过" in message
+    assert "first_get_elapsed_ms=216" in message
+    assert "challenge_elapsed_ms=2741" in message
+    assert "challenge_completion_signal=cookie" in message
+    assert "retry_challenge_elapsed_ms=8004" in message
+    assert "retry_challenge_completion_signal=timeout" in message
+    assert "final_get_elapsed_ms=287" in message
+    assert "?p=1" not in message
+
+
 def test_login_preflights_booking_page_before_cas(monkeypatch) -> None:
     events = []
 
