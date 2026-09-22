@@ -26,9 +26,10 @@ def plan_consecutive_first(
 ) -> BookingPlan:
     """Select slots without exceeding either the account or job limit.
 
-    Preferences are evaluated in ascending priority order. A complete block wins
-    over a partial block. When fallback is enabled, available members of an
-    incomplete block are considered in their declared order.
+    Preferences are evaluated in ascending priority order. Complete blocks are
+    considered before every partial block. When fallback is enabled, available
+    members of incomplete blocks are considered only after the complete-block
+    pass, again in declared priority order.
     """
 
     capacity = remaining_capacity(unfinished, maximum)
@@ -40,7 +41,12 @@ def plan_consecutive_first(
     selected: list[SlotKey] = []
     selected_set: set[SlotKey] = set()
 
-    for preference in sorted(preferences, key=lambda item: item.priority):
+    ordered_preferences = sorted(preferences, key=lambda item: item.priority)
+
+    # First select complete blocks. This keeps a partial high-priority block
+    # from consuming the budget before a lower-priority complete block can be
+    # considered.
+    for preference in ordered_preferences:
         block = tuple(
             SlotKey(preference.venue, preference.sport, target_date, time)
             for time in preference.times
@@ -54,14 +60,20 @@ def plan_consecutive_first(
                 if slot not in selected_set:
                     selected.append(slot)
                     selected_set.add(slot)
-            continue
 
-        if fallback_to_single:
+    if fallback_to_single and len(selected) < budget:
+        for preference in ordered_preferences:
+            block = tuple(
+                SlotKey(preference.venue, preference.sport, target_date, time)
+                for time in preference.times
+            )
             for slot in block:
                 if len(selected) >= budget:
                     break
                 if slot in available_set and slot not in selected_set:
                     selected.append(slot)
                     selected_set.add(slot)
+            if len(selected) >= budget:
+                break
 
     return BookingPlan(tuple(selected), unfinished, capacity)

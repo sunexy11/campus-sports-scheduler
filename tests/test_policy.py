@@ -48,6 +48,32 @@ def test_complete_consecutive_block_is_preferred() -> None:
     )
 
 
+def test_complete_lower_priority_block_wins_before_single_slot_fallback() -> None:
+    preferences = [
+        BlockPreference("北区体育馆", "羽毛球", ("19:00-20:00", "20:00-21:00"), 0),
+        BlockPreference("北区体育馆", "羽毛球", ("15:00-16:00", "16:00-17:00"), 1),
+    ]
+    available = {
+        slot("北区体育馆", "19:00-20:00"),
+        slot("北区体育馆", "15:00-16:00"),
+        slot("北区体育馆", "16:00-17:00"),
+    }
+
+    plan = plan_consecutive_first(
+        target_date=TARGET_DATE,
+        preferences=preferences,
+        available=available,
+        unfinished=1,
+        max_new=2,
+        fallback_to_single=True,
+    )
+
+    assert plan.selected == (
+        slot("北区体育馆", "15:00-16:00"),
+        slot("北区体育馆", "16:00-17:00"),
+    )
+
+
 def test_capacity_truncates_a_block() -> None:
     preference = BlockPreference(
         "北区体育馆", "羽毛球", ("19:00-20:00", "20:00-21:00"), 0

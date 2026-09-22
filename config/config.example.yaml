@@ -6,27 +6,6 @@ limits:
   auto_cancel: false
 
 scheduled_jobs:
-  - name: 后天正大优先羽毛球
-    enabled: false
-    date_offset: 2
-    action_start: "06:50"
-    login_at: "06:55"
-    submit_at: "07:00"
-    strategy: consecutive_first
-    max_new_reservations: 2
-    # 先尝试正大两个连续时段；正大没有完整连续块时再尝试北区。
-    fallback_to_single_slot: true
-    preferences:
-      - venue: 正大体育馆
-        sport: 羽毛球
-        blocks:
-          - ["19:00-20:00", "20:00-21:00"]
-          - ["20:00-21:00", "21:00-22:00"]
-      - venue: 北区体育馆
-        sport: 羽毛球
-        blocks:
-          - ["19:00-20:00", "20:00-21:00"]
-
   - name: 后天北区优先羽毛球
     enabled: true
     date_offset: 2
@@ -34,17 +13,15 @@ scheduled_jobs:
     login_at: "06:55"
     submit_at: "07:00"
     strategy: consecutive_first
-    max_new_reservations: 1
+    max_new_reservations: 2
     fallback_to_single_slot: true
     preferences:
       - venue: 北区体育馆
         sport: 羽毛球
         blocks:
-          - ["19:00-20:00"]
-          - ["20:00-21:00"]
-          - ["16:00-17:00"]
-          - ["15:00-16:00"]
-          - ["14:00-15:00"]
+          - ["19:00-20:00", "20:00-21:00"]
+          - ["15:00-16:00", "16:00-17:00"]
+          - ["14:00-15:00", "15:00-16:00"]
   
 monitor:
   enabled: true
