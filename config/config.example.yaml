@@ -34,18 +34,17 @@ scheduled_jobs:
     login_at: "06:55"
     submit_at: "07:00"
     strategy: consecutive_first
-    max_new_reservations: 2
+    max_new_reservations: 1
     fallback_to_single_slot: true
     preferences:
       - venue: 北区体育馆
         sport: 羽毛球
         blocks:
-          - ["19:00-20:00", "20:00-21:00"]
-      - venue: 正大体育馆
-        sport: 羽毛球
-        blocks:
-          - ["19:00-20:00", "20:00-21:00"]
-          - ["20:00-21:00", "21:00-22:00"]
+          - ["19:00-20:00"]
+          - ["20:00-21:00"]
+          - ["16:00-17:00"]
+          - ["15:00-16:00"]
+          - ["14:00-15:00"]
   
 monitor:
   enabled: true
