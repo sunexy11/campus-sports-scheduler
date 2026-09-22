@@ -101,7 +101,8 @@ FUDAN_MOBILE            可选；推荐填写，避免预约开始后再读取�
    手动点击 **Run workflow** 时的表单默认值；`wait_until` 默认值只影响没有通过请求体传入时间时的
    手动运行。正常使用 Cron-job.org 时，不要为了每次测试去改这些默认值。
 3. Cron-job.org 请求体是“这一次是否真的提交”。定时预约请求传
-   `allow_booking: true` 和 `wait_until: "07:00"`；监控请求传 `allow_booking: true` 或 `false`。
+   `allow_booking: true`、`wait_until: "07:00"` 和 `retry_window_seconds: "180"`；监控请求传
+   `allow_booking: true` 或 `false`。
    它只决定本次运行是否允许提交，不改变仓库配置。
 
 `monitor.jobs[].mode` 和 `allow_booking` 看起来相似，但职责不同：
@@ -190,6 +191,11 @@ fudan-booking monitor-once --config config/config.example.yaml --allow-booking
 Cookie 更新还是超时结束。只读 GET 的失败日志还会显示各次 GET 的耗时。若最终仍为 HTTP 412，
 错误信息会带上两轮挑战的耗时和完成信号，便于查看
 GitHub Actions 上 Cookie 实际更新用了多久。
+
+真实定时预约从 `wait_until` 到达或命令实际开始提交时起，使用同一个登录会话持续运行
+`retry_window_seconds`（默认 180 秒）。临时网络错误、HTTP 412、5xx 或暂时无空位不会立即结束；
+程序会按有限退避重新读取容量和日历。达到 `max_new_reservations`、账号容量耗尽或相对时间窗结束后退出，
+不会主动重新登录。单次底层 GET/POST 默认最多等待 15 秒，可通过 `FUDAN_REQUEST_TIMEOUT_MS` 调整。
 
 预约或监控开始前，程序会从网站读取当前未结束预约数，并用“3 减去已有数量”和任务的
 `max_new_reservations` 取较小值作为本次最多新增数量。已有预约达到 3 个，或某个任务的

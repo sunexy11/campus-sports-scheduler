@@ -13,6 +13,11 @@ on:
         required: true
         default: "07:00"
         type: string
+      retry_window_seconds:
+        description: Keep live booking retries running for this many seconds
+        required: true
+        default: "180"
+        type: string
 
 permissions:
   contents: read
@@ -60,6 +65,7 @@ jobs:
           if [[ -n "${{ inputs.wait_until }}" ]]; then
             args+=(--wait-until "${{ inputs.wait_until }}")
           fi
+          args+=(--retry-window-seconds "${{ inputs.retry_window_seconds }}")
           if [[ "${{ inputs.allow_booking }}" == "true" ]]; then
             args+=(--allow-booking)
           fi

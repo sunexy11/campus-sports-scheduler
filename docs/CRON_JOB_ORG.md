@@ -63,12 +63,14 @@ https://api.github.com/repos/sunexy11/campus-sports-scheduler/actions/workflows/
   "ref": "main",
   "inputs": {
     "allow_booking": "true",
-    "wait_until": "07:00"
+    "wait_until": "07:00",
+    "retry_window_seconds": "180"
   }
 }
 ```
 
-运行逻辑是：06:50 左右触发 Actions，环境准备和登录完成后等到 07:00，再提交预约。
+运行逻辑是：06:50 左右触发 Actions，环境准备和登录完成后等到 07:00，然后在同一个登录会话中
+持续查询和预约最多 180 秒。达到本次新增上限、账号没有剩余额度或 180 秒到期时结束；不会主动重新登录。
 
 第一次测试时，把 `allow_booking` 改成 `false`，只检查日志中的计划和时间；确认无误后再改回
 `true`。Cron-job.org 的 Test run 也只能先使用 `false`，不要直接用真实预约测试。

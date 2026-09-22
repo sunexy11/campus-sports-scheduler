@@ -17,6 +17,7 @@ GitHub Actions 需要 Node 24 与 challenge 依赖。预约列表、场馆列表
 - 网站已有三个未结束预约时，本轮直接跳过查询和预约；不会取消已有预约。
 - 本项目永远不会自动取消已有预约。
 - 定时预约和五分钟监控统一通过 Cron-job.org 调用 GitHub `workflow_dispatch`，不依赖 GitHub 原生 `schedule` 的准点性。
+- 定时预约到点后在同一登录会话内持续重试最多 180 秒；达到本次上限、账号容量耗尽或时间窗结束后退出。
 - 监控暂不部署到 Cloudflare Worker；当前 Node/JSDOM 会话桥先在 GitHub Actions/Node 环境验证。
 - 通知仅使用 QQ SMTP。
 

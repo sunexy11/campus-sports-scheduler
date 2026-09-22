@@ -39,6 +39,10 @@ const RETRY_CHALLENGE_TIMEOUT_MS = challengeTimeout(
   "FUDAN_POST_RETRY_CHALLENGE_TIMEOUT_MS",
   8000,
 );
+const REQUEST_TIMEOUT_MS = challengeTimeout(
+  "FUDAN_REQUEST_TIMEOUT_MS",
+  15000,
+);
 
 function assertBookingUrl(value) {
   const parsed = new URL(value);
@@ -78,6 +82,7 @@ async function fetchBookingGet(startUrl, cookieJar, referer, extraHeaders = {}) 
   for (let redirects = 0; redirects < 10; redirects += 1) {
     const response = await fetch(current.toString(), {
       method: "GET",
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       headers: {
         ...safeHeaders(extraHeaders),
         Cookie: cookieJar.getCookieStringSync(current.toString()),
@@ -107,6 +112,7 @@ async function fetchBookingPost(url, cookieJar, referer, body) {
   }
   const response = await fetch(current.toString(), {
     method: "POST",
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     headers: {
       Cookie: cookieJar.getCookieStringSync(current.toString()),
       "Content-Type": "application/x-www-form-urlencoded",

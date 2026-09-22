@@ -15,7 +15,11 @@ from dotenv import load_dotenv
 
 from .auth import UISCredentials
 from .booking_api import BookingReadClient
-from .booking_runner import prewarm_scheduled_context, scheduled_book_once
+from .booking_runner import (
+    prewarm_scheduled_context,
+    scheduled_book_once,
+    scheduled_book_with_retries,
+)
 from .config import load_config
 from .errors import BookingError, ConfigurationError
 from .monitor import monitor_and_book_once
@@ -82,6 +86,12 @@ def _build_parser() -> argparse.ArgumentParser:
     scheduled.add_argument(
         "--wait-until",
         help="wait until HH:MM Asia/Shanghai after login before querying/submitting",
+    )
+    scheduled.add_argument(
+        "--retry-window-seconds",
+        type=int,
+        default=180,
+        help="keep live opening-time retries running for this many seconds",
     )
     scheduled.add_argument("--no-email", action="store_true", help="do not send QQ email")
     return parser
@@ -180,16 +190,24 @@ def _run_scheduled_book_once(args: argparse.Namespace) -> int:
         if job.get("enabled")
         and max(0, int(job.get("max_new_reservations", 1))) > 0
     ]
-    prepared_resources = client.list_resources() if enabled_jobs else None
-    if args.allow_booking and enabled_jobs:
-        client.prepare_contact()
-    if prepared_resources is not None:
-        prewarm_scheduled_context(
-            client,
-            config.raw,
-            today=run_today,
-            resources=prepared_resources,
-        )
+    prepared_resources = None
+    if enabled_jobs:
+        try:
+            prepared_resources = client.list_resources()
+            if args.allow_booking:
+                client.prepare_contact()
+            prewarm_scheduled_context(
+                client,
+                config.raw,
+                today=run_today,
+                resources=prepared_resources,
+            )
+        except (BookingError, requests.RequestException):
+            if not args.allow_booking:
+                raise
+            # Prewarming is an optimization.  A live booking run retries the
+            # same reads after the opening time using the existing session.
+            prepared_resources = None
     if args.wait_until:
         hour_text, minute_text = args.wait_until.split(":", 1)
         target_minutes = int(hour_text) * 60 + int(minute_text)
@@ -197,13 +215,23 @@ def _run_scheduled_book_once(args: argparse.Namespace) -> int:
         current_minutes = now.hour * 60 + now.minute
         if target_minutes > current_minutes:
             time.sleep((target_minutes - current_minutes) * 60 - now.second)
-    result = scheduled_book_once(
-        client,
-        config.raw,
-        today=run_today,
-        allow_booking=bool(args.allow_booking),
-        prepared_resources=prepared_resources,
-    )
+    if args.allow_booking:
+        result = scheduled_book_with_retries(
+            client,
+            config.raw,
+            today=run_today,
+            allow_booking=True,
+            prepared_resources=prepared_resources,
+            retry_window_seconds=int(args.retry_window_seconds),
+        )
+    else:
+        result = scheduled_book_once(
+            client,
+            config.raw,
+            today=run_today,
+            allow_booking=False,
+            prepared_resources=prepared_resources,
+        )
     if not args.no_email:
         notifier = QQSMTPNotifier(QQSMTPSettings.from_env())
         successful = [
