@@ -47,6 +47,24 @@ class FakeBookingBridge:
         return BookingResponse({"e": "OK", "d": {"mobile": "13800000000"}})
 
 
+class TimedReadResponse(FakeResponse):
+    def __init__(self, payload: dict) -> None:
+        super().__init__(payload)
+        self.status_code = 200
+        self.url = "https://booking.fudan.edu.cn/reservation/api/user/unfinished"
+        self.headers = {
+            "X-Fudan-Request-Elapsed-Ms": "4210",
+            "X-Fudan-First-Get-Elapsed-Ms": "300",
+            "X-Fudan-Challenge-Elapsed-Ms": "3500",
+            "X-Fudan-Challenge-Completed": "true",
+            "X-Fudan-Challenge-Completion-Signal": "cookie",
+        }
+
+
+class TimedReadBridge:
+    def get(self, url, **kwargs):
+        return TimedReadResponse({"e": "OK", "d": {"data": []}})
+
 
 class FakeSession:
     def __init__(self, responses: list[dict]) -> None:
@@ -81,6 +99,28 @@ def test_resource_and_schedule_queries_are_read_only() -> None:
     assert resources[0].name == "北区体育馆-羽毛球"
     assert schedule == {"time": [], "resource": [], "data": {}}
     assert all("timeout" in kwargs for _, kwargs in session.requests)
+
+
+def test_read_request_timing_records_challenge_without_url_query_or_secrets() -> None:
+    session = FakeSession([])
+    session._fudan_cas_bridge = TimedReadBridge()
+    client = BookingReadClient(session)
+
+    client._get("https://booking.fudan.edu.cn/reservation/api/user/unfinished?token=private")
+
+    assert client.read_request_timings == [
+        {
+            "endpoint": "/reservation/api/user/unfinished",
+            "status": 200,
+            "request_elapsed_ms": 4210,
+            "first_get_elapsed_ms": 300,
+            "challenge_elapsed_ms": 3500,
+            "challenge_completed": True,
+            "challenge_completion_signal": "cookie",
+            "challenge_attempted": True,
+        }
+    ]
+    assert "private" not in repr(client.read_request_timings)
 
 
 def test_unfinished_list_is_returned_without_cancellation_surface() -> None:

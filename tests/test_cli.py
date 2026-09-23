@@ -13,6 +13,15 @@ from fudan_booking.booking_api import (
 
 
 class FakeReadClient:
+    def __init__(self) -> None:
+        self.read_request_timings = [
+            {
+                "endpoint": "/reservation/api/user/unfinished",
+                "status": 200,
+                "request_elapsed_ms": 7,
+            }
+        ]
+
     def list_resources(self):
         return [ResourceSummary(938, "北区体育馆-羽毛球", 6)]
 
@@ -53,6 +62,13 @@ def test_probe_prints_only_safe_read_only_summary(monkeypatch, capsys) -> None:
     assert payload["remaining_reservation_capacity"] == 2
     assert payload["resources"][0]["name"] == "北区体育馆-羽毛球"
     assert payload["schedule"]["periods"][0]["available"] is True
+    assert payload["read_request_timings"] == [
+        {
+            "endpoint": "/reservation/api/user/unfinished",
+            "status": 200,
+            "request_elapsed_ms": 7,
+        }
+    ]
     output = json.dumps(payload, ensure_ascii=False)
     assert "secret-password" not in output
     assert "must not be printed" not in output

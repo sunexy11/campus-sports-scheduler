@@ -132,6 +132,7 @@ def _run_probe(args: argparse.Namespace) -> int:
         ],
         "unfinished_reservation_count": unfinished_count,
         "remaining_reservation_capacity": max(0, 3 - unfinished_count),
+        "read_request_timings": getattr(client, "read_request_timings", []),
     }
     if args.resource_id is not None:
         availability = client.get_availability(args.resource_id, args.date)
@@ -167,6 +168,7 @@ def _run_monitor_once(args: argparse.Namespace) -> int:
         allow_booking=bool(getattr(args, "allow_booking", False)),
         max_rounds=int(getattr(args, "max_booking_rounds", 3)),
     )
+    result["read_request_timings"] = getattr(client, "read_request_timings", [])
     print(
         json.dumps(
             {"ok": True, "mode": "monitor_once", **result},
@@ -251,6 +253,7 @@ def _run_scheduled_book_once(args: argparse.Namespace) -> int:
         else:
             lines.append("本次未成功预约任何场次。")
         notifier.send("复旦场馆定时预约结果", "\n".join(lines))
+    result["read_request_timings"] = getattr(client, "read_request_timings", [])
     print(json.dumps({"ok": True, **result}, ensure_ascii=False, indent=2))
     return 0
 

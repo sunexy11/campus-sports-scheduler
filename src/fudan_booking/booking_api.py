@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from dataclasses import dataclass
 from datetime import date, datetime
 from urllib.parse import urlsplit
@@ -160,18 +161,64 @@ class BookingReadClient:
         # The authenticated profile is the fallback.  An explicitly supplied
         # secret avoids an extra profile GET after the opening-time wait.
         self._configured_mobile = os.getenv("FUDAN_MOBILE", "").strip()
+        # Safe diagnostics for read requests.  Keep only endpoint paths and
+        # timings/statuses; never retain cookies, query parameters, or bodies.
+        self.read_request_timings: list[dict[str, object]] = []
 
     def _get(self, url: str, **kwargs) -> requests.Response:
         """Use the persistent no-browser bridge when CAS created one."""
-
+        started = time.perf_counter()
         bridge = getattr(self.session, "_fudan_cas_bridge", None)
         if bridge is None:
-            return self.session.get(url, **kwargs)
-        params = kwargs.pop("params", None)
-        headers = dict(self.session.headers)
-        headers.update(kwargs.pop("headers", {}) or {})
-        prepared = requests.Request("GET", url, params=params).prepare()
-        return bridge.get(prepared.url, headers=headers)
+            response = self.session.get(url, **kwargs)
+        else:
+            params = kwargs.pop("params", None)
+            headers = dict(self.session.headers)
+            headers.update(kwargs.pop("headers", {}) or {})
+            prepared = requests.Request("GET", url, params=params).prepare()
+            response = bridge.get(prepared.url, headers=headers)
+        headers = getattr(response, "headers", {}) or {}
+
+        def integer(name: str) -> int | None:
+            try:
+                value = headers.get(name)
+                return int(value) if value is not None else None
+            except (TypeError, ValueError):
+                return None
+
+        timing: dict[str, object] = {
+            "endpoint": urlsplit(getattr(response, "url", None) or url).path,
+            "status": getattr(response, "status_code", None),
+            "request_elapsed_ms": integer("X-Fudan-Request-Elapsed-Ms")
+            or round((time.perf_counter() - started) * 1000),
+        }
+        for key, header in (
+            ("first_get_elapsed_ms", "X-Fudan-First-Get-Elapsed-Ms"),
+            ("retry_get_elapsed_ms", "X-Fudan-Retry-Get-Elapsed-Ms"),
+            ("final_get_elapsed_ms", "X-Fudan-Final-Get-Elapsed-Ms"),
+            ("challenge_elapsed_ms", "X-Fudan-Challenge-Elapsed-Ms"),
+            ("retry_challenge_elapsed_ms", "X-Fudan-Retry-Challenge-Elapsed-Ms"),
+        ):
+            value = integer(header)
+            if value is not None:
+                timing[key] = value
+        for key, header in (
+            ("challenge_completed", "X-Fudan-Challenge-Completed"),
+            ("retry_challenge_completed", "X-Fudan-Retry-Challenge-Completed"),
+        ):
+            value = headers.get(header)
+            if value is not None:
+                timing[key] = str(value).lower() == "true"
+        for key, header in (
+            ("challenge_completion_signal", "X-Fudan-Challenge-Completion-Signal"),
+            ("retry_challenge_completion_signal", "X-Fudan-Retry-Challenge-Completion-Signal"),
+        ):
+            value = headers.get(header)
+            if value:
+                timing[key] = value
+        timing["challenge_attempted"] = "challenge_elapsed_ms" in timing
+        self.read_request_timings.append(timing)
+        return response
 
     def submit_booking(
         self,
@@ -435,8 +482,10 @@ class BookingReadClient:
 
         headers = getattr(response, "headers", {}) or {}
         fields = (
+            ("request_elapsed_ms", "X-Fudan-Request-Elapsed-Ms"),
             ("first_get_elapsed_ms", "X-Fudan-First-Get-Elapsed-Ms"),
             ("challenge_elapsed_ms", "X-Fudan-Challenge-Elapsed-Ms"),
+            ("challenge_completed", "X-Fudan-Challenge-Completed"),
             (
                 "challenge_completion_signal",
                 "X-Fudan-Challenge-Completion-Signal",
@@ -445,6 +494,10 @@ class BookingReadClient:
             (
                 "retry_challenge_elapsed_ms",
                 "X-Fudan-Retry-Challenge-Elapsed-Ms",
+            ),
+            (
+                "retry_challenge_completed",
+                "X-Fudan-Retry-Challenge-Completed",
             ),
             (
                 "retry_challenge_completion_signal",
