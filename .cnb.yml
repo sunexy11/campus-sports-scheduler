@@ -29,14 +29,34 @@ main:
               exit 2
             fi
 
-            if [ "${BOOKING_ALLOW_LIVE:-false}" = "true" ]; then
+            allow_booking="${allow_booking:-false}"
+            wait_until="${wait_until:-07:00}"
+            retry_window_seconds="${retry_window_seconds:-180}"
+
+            case "$allow_booking" in
+              true|false) ;;
+              *) echo "allow_booking must be 'true' or 'false'." >&2; exit 2 ;;
+            esac
+            case "$retry_window_seconds" in
+              ''|*[!0-9]*) echo "retry_window_seconds must be a positive integer." >&2; exit 2 ;;
+            esac
+            if [ "$retry_window_seconds" -lt 1 ]; then
+              echo "retry_window_seconds must be a positive integer." >&2
+              exit 2
+            fi
+            if ! python3 -c 'import re, sys; sys.exit(0 if re.fullmatch(r"(?:[01][0-9]|2[0-3]):[0-5][0-9]", sys.argv[1]) else 1)' "$wait_until"; then
+              echo "wait_until must use 24-hour HH:MM format." >&2
+              exit 2
+            fi
+
+            if [ "$allow_booking" = "true" ]; then
               .venv/bin/fudan-booking scheduled-book-once \
                 --config config/config.example.yaml \
-                --wait-until 07:00 \
-                --retry-window-seconds 180 \
+                --wait-until "$wait_until" \
+                --retry-window-seconds "$retry_window_seconds" \
                 --allow-booking
             else
-              echo "BOOKING_ALLOW_LIVE is not true; running read-only dry-run."
+              echo "allow_booking is not true; running read-only dry-run."
               .venv/bin/fudan-booking scheduled-book-once \
                 --config config/config.example.yaml \
                 --no-email
