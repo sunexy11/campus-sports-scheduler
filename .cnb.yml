@@ -1,0 +1,43 @@
+main:
+  api_trigger_book_at_open:
+    - name: Book at opening time
+      runner:
+        tags: cnb:arch:amd64
+        cpus: 1
+      docker:
+        image: node:24-bookworm
+      imports:
+        - https://cnb.cool/sunexy11/campus-sports-scheduler-secrets/-/blob/main/booking.yml
+      stages:
+        - name: Prepare Python and Node dependencies
+          script: |
+            set -eu
+            apt-get update
+            apt-get install -y --no-install-recommends python3 python3-venv
+            rm -rf /var/lib/apt/lists/*
+            npm install --global pnpm@11.25.0
+            node --version
+            pnpm --dir challenge install --frozen-lockfile
+            python3 -m venv .venv
+            .venv/bin/pip install --disable-pip-version-check -e .
+            .venv/bin/fudan-booking validate-config --config config/config.example.yaml
+        - name: Run dry-run or scheduled booking
+          script: |
+            set -eu
+            if [ -z "${FUDAN_USERNAME:-}" ] || [ -z "${FUDAN_PASSWORD:-}" ]; then
+              echo "FUDAN_USERNAME and FUDAN_PASSWORD are required." >&2
+              exit 2
+            fi
+
+            if [ "${BOOKING_ALLOW_LIVE:-false}" = "true" ]; then
+              .venv/bin/fudan-booking scheduled-book-once \
+                --config config/config.example.yaml \
+                --wait-until 07:00 \
+                --retry-window-seconds 180 \
+                --allow-booking
+            else
+              echo "BOOKING_ALLOW_LIVE is not true; running read-only dry-run."
+              .venv/bin/fudan-booking scheduled-book-once \
+                --config config/config.example.yaml \
+                --no-email
+            fi
